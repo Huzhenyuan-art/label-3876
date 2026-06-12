@@ -1,0 +1,115 @@
+import React, { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { ArrowLeft, ShoppingBag, Trash2, Minus, Plus, Zap, Check, ShieldCheck } from 'lucide-react'
+import { Header } from '../components/Header'
+import { useCart } from '../contexts/CartContext'
+
+export default function CartPage() {
+    const navigate = useNavigate()
+    const { items, updateQuantity, removeFromCart, totalPrice, totalItems, clearCart } = useCart()
+    const [isProcessing, setIsProcessing] = useState(false)
+    const [showSuccess, setShowSuccess] = useState(false)
+
+    const handleCheckout = () => {
+        setIsProcessing(true)
+        setTimeout(() => {
+            setIsProcessing(false)
+            setShowSuccess(true)
+            setTimeout(() => {
+                setShowSuccess(false)
+                clearCart()
+                navigate('/')
+            }, 5000)
+        }, 2000)
+    }
+
+    if (items.length === 0) {
+        return (
+            <div className="min-h-screen bg-secondary-50/50">
+                <Header showSearch={false} />
+                <main className="max-w-7xl mx-auto px-4 py-16 text-center">
+                    <div className="bg-white rounded-[2.5rem] p-16 shadow-2xl border border-white max-w-lg mx-auto mt-10">
+                        <ShoppingBag className="h-20 w-20 text-secondary-100 mx-auto mb-8 animate-in zoom-in duration-700" />
+                        <h2 className="text-3xl font-black text-secondary-900 mb-4 tracking-tighter italic">购物车是空的</h2>
+                        <button onClick={() => navigate('/')} className="w-full bg-primary text-white py-5 rounded-2xl font-black text-sm hover:bg-primary-600 shadow-2xl active:scale-95 uppercase tracking-[0.2em]">去逛逛精选</button>
+                    </div>
+                </main>
+            </div>
+        )
+    }
+
+    return (
+        <div className="min-h-screen bg-secondary-50/50">
+            <Header showSearch={false} />
+            <main className="max-w-7xl mx-auto px-6 py-10">
+                <div className="flex items-center gap-6 mb-12 animate-in slide-in-from-left duration-500">
+                    <button onClick={() => navigate(-1)} className="p-3 bg-white border border-secondary-100 text-secondary-400 hover:text-primary active:scale-90 rounded-2xl shadow-sm"><ArrowLeft className="h-5 w-5" /></button>
+                    <h1 className="text-3xl font-black text-secondary-900 tracking-tighter italic">我的购物车 / {totalItems} ITEMS</h1>
+                </div>
+                <div className="flex flex-col lg:flex-row gap-10 items-start pb-32">
+                    <div className="lg:col-span-2 flex-1 space-y-6">
+                        {items.map((item, idx) => (
+                            <div key={`${item.id}-${idx}`} className="bg-white rounded-3xl p-6 shadow-xl border border-secondary-50 flex gap-8 animate-in fade-in slide-in-from-bottom-4 group relative overflow-hidden">
+                                <Link to={`/product/${item.id}`} className="shrink-0 rounded-[1.5rem] overflow-hidden shadow-2xl border border-secondary-50"><img src={item.main_image} alt="" loading="lazy" decoding="async" className="w-36 h-36 object-cover group-hover:scale-110 transition-transform" /></Link>
+                                <div className="flex-1 flex flex-col justify-between py-1">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <Link to={`/product/${item.id}`} className="font-black text-secondary-900 text-xl hover:text-primary transition-colors tracking-tighter italic">{item.name}</Link>
+                                        <button onClick={() => removeFromCart(item.id, item.selectedSpecs)} className="p-2 text-secondary-200 hover:text-primary active:scale-75"><Trash2 className="h-5 w-5" /></button>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-2xl font-black text-primary tracking-tighter italic">¥{item.price.toFixed(2)}</span>
+                                        <div className="flex items-center gap-5 bg-secondary-50/80 p-1.5 rounded-[1.25rem] border border-secondary-100 shadow-inner">
+                                            <button onClick={() => updateQuantity(item.id, item.quantity - 1, item.selectedSpecs)} disabled={item.quantity <= 1} className="w-10 h-10 bg-white rounded-xl shadow-sm hover:text-primary active:scale-75 disabled:opacity-20"><Minus className="h-4 w-4" /></button>
+                                            <span className="w-8 text-center font-black text-secondary-900 tabular-nums">{item.quantity}</span>
+                                            <button onClick={() => updateQuantity(item.id, item.quantity + 1, item.selectedSpecs)} className="w-10 h-10 bg-white rounded-xl shadow-sm hover:text-primary active:scale-75"><Plus className="h-4 w-4" /></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <aside className="w-full lg:w-[420px] shrink-0 lg:sticky lg:top-28">
+                        <div className="bg-secondary-900 rounded-[2.5rem] p-12 text-white shadow-2xl relative overflow-hidden">
+                            <h2 className="text-3xl font-black mb-12 tracking-tighter italic opacity-90">订单摘要</h2>
+                            <div className="space-y-6 mb-12 flex justify-between items-end">
+                                <span className="text-xs font-black text-secondary-300 uppercase tracking-[0.2em]">应付合计数</span>
+                                <div className="text-right"><div className="text-5xl font-black text-primary tracking-tighter italic">¥{totalPrice.toFixed(2)}</div></div>
+                            </div>
+                            <button
+                                onClick={handleCheckout}
+                                disabled={isProcessing || showSuccess}
+                                className="w-full bg-white text-secondary-900 py-6 rounded-2xl font-black text-sm hover:bg-primary hover:text-white transition-all shadow-2xl active:scale-95 flex items-center justify-center gap-4 uppercase tracking-[0.3em] group disabled:opacity-50"
+                            >
+                                {isProcessing ? (
+                                    <div className="flex items-center gap-3"><div className="w-4 h-4 border-2 border-secondary-900 border-t-transparent rounded-full animate-spin"></div> 处理中...</div>
+                                ) : showSuccess ? (
+                                    <div className="flex items-center gap-3 text-green-500"><Check className="h-5 w-5" /> 订单已提交</div>
+                                ) : (
+                                    <><Zap className="h-5 w-5 fill-primary text-primary group-hover:fill-white group-hover:text-white" /> 立即支付 ({totalItems})</>
+                                )}
+                            </button>
+                            <p className="text-[10px] text-secondary-500 font-bold uppercase tracking-widest text-center mt-8 opacity-50">Secure Checkout Powered by ShieldPay</p>
+                        </div>
+                    </aside>
+                </div>
+
+                {showSuccess && (
+                    <div className="fixed inset-0 bg-secondary-900/60 backdrop-blur-xl z-[200] flex items-center justify-center p-6 animate-in fade-in duration-500">
+                        <div className="bg-white rounded-[3rem] p-12 max-w-md w-full text-center shadow-3xl border border-white animate-in zoom-in-95 duration-500">
+                            <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-green-500/20">
+                                <Check className="h-12 w-12 text-white stroke-[3px]" />
+                            </div>
+                            <h2 className="text-4xl font-black text-secondary-900 mb-4 tracking-tighter italic uppercase">支付成功！</h2>
+                            <p className="text-secondary-400 font-bold mb-10 leading-relaxed">您的订单已在快马加鞭处理中，<br />我们将尽快为您安排发货。</p>
+                            <div className="p-6 bg-secondary-50 rounded-2xl flex items-center justify-between mb-10 border border-secondary-100">
+                                <div className="text-left"><p className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">实付金额</p><p className="text-2xl font-black text-primary italic tracking-tighter">¥{totalPrice.toFixed(2)}</p></div>
+                                <ShieldCheck className="h-8 w-8 text-secondary-200" />
+                            </div>
+                            <button onClick={() => navigate('/')} className="w-full py-5 bg-secondary-900 text-white rounded-2xl font-black text-sm hover:bg-primary transition-all active:scale-95 uppercase tracking-[0.2em]">返回首页</button>
+                        </div>
+                    </div>
+                )}
+            </main>
+        </div>
+    )
+}

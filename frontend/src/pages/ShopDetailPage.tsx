@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Check, MessageCircle, Star, Heart, Search } from 'lucide-react'
+import { Check, MessageCircle, Star, Heart, Search, Package, Sparkles, Flame, Percent } from 'lucide-react'
 import { Header } from '../components/Header'
 import { Product, Shop } from '../types'
 import { shopApi } from '../api'
@@ -17,6 +17,13 @@ const MOCK_PRODUCTS: Product[] = [
     images: { gallery: ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e', 'https://images.unsplash.com/photo-1484704849700-f032a568e944'] },
     specs: { '颜色': ['月岩灰', '暗夜黑'], '配置': ['标准版', 'Pro版'] }, shop_id: 1, created_at: '2024-01-01'
   }
+]
+
+const CATEGORIES: { name: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { name: '全部商品', icon: Package },
+  { name: '上新推荐', icon: Sparkles },
+  { name: '本周热销', icon: Flame },
+  { name: '优惠专区', icon: Percent },
 ]
 
 export default function ShopDetailPage() {
@@ -106,11 +113,26 @@ export default function ShopDetailPage() {
       </div>
       <main className="max-w-[1600px] mx-auto px-6 py-12">
         <div className="flex flex-col lg:flex-row gap-10 items-start">
-          <aside className="w-full lg:w-64 shrink-0 space-y-8 lg:sticky lg:top-28">
-            <div className="bg-white rounded-3xl p-6 shadow-xl border border-secondary-50">
+          <aside className="w-full lg:w-72 shrink-0 space-y-5 lg:sticky lg:top-28">
+            <div className="bg-white rounded-3xl p-6 shadow-xl border border-secondary-100">
+              <div className="flex items-center gap-2 mb-5 pb-4 border-b border-secondary-100">
+                <div className="p-2 bg-primary/10 rounded-xl"><Package className="h-4 w-4 text-primary" /></div>
+                <div>
+                  <h3 className="font-black text-sm text-secondary-900">商品分类</h3>
+                  <p className="text-[10px] text-secondary-400 font-medium">快速筛选找到心仪商品</p>
+                </div>
+              </div>
               <nav className="flex flex-col gap-2">
-                {['全部商品', '上新推荐', '本周热销', '优惠专区'].map(name => (
-                  <button key={name} onClick={() => setActiveCategory(name)} className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-black text-xs transition-all ${activeCategory === name ? 'bg-primary text-white shadow-xl' : 'text-secondary-600 hover:text-primary'}`}>{name}</button>
+                {CATEGORIES.map(({ name, icon: Icon }) => (
+                  <button
+                    key={name}
+                    onClick={() => setActiveCategory(name)}
+                    className={`relative flex items-center gap-3 px-4 py-3.5 rounded-2xl font-bold text-sm transition-all ${activeCategory === name ? 'bg-gradient-to-r from-primary to-primary-600 text-white shadow-xl shadow-primary/30 scale-[1.02]' : 'bg-secondary-50 text-secondary-700 hover:bg-secondary-100 hover:text-primary border border-transparent hover:border-primary/20'}`}
+                  >
+                    <Icon className={`h-4 w-4 shrink-0 ${activeCategory === name ? 'text-white' : 'text-secondary-400'}`} />
+                    <span className="flex-1 text-left">{name}</span>
+                    {activeCategory === name && <div className="w-1.5 h-1.5 rounded-full bg-white/80" />}
+                  </button>
                 ))}
               </nav>
             </div>

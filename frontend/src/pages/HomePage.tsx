@@ -2,16 +2,27 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Search, Zap, TrendingUp, Sparkles, Headphones, Heart, ChevronRight, X } from 'lucide-react'
 import { Header } from '../components/Header'
-import { Product } from '../types'
-import { productApi } from '../api'
+import { Product, Category } from '../types'
+import { productApi, categoryApi } from '../api'
 import { useFavorites } from '../contexts/FavoritesContext'
 
 import { MOCK_PRODUCTS } from '../mocks'
 
+const MOCK_CATEGORIES: Category[] = [
+  { id: 1, name: '潮流服装', icon: '👕', description: '', sort_order: 1, created_at: '' },
+  { id: 2, name: '智能数码', icon: '📱', description: '', sort_order: 2, created_at: '' },
+  { id: 3, name: '美妆护肤', icon: '💄', description: '', sort_order: 3, created_at: '' },
+  { id: 4, name: '居家生活', icon: '🏠', description: '', sort_order: 4, created_at: '' },
+  { id: 5, name: '图书文具', icon: '📚', description: '', sort_order: 5, created_at: '' },
+  { id: 6, name: '户外运动', icon: '🏃', description: '', sort_order: 6, created_at: '' },
+]
+
 export default function HomePage() {
   const [products, setProducts] = useState<Product[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeCategory, setActiveCategory] = useState('全部')
+  const [categoriesLoading, setCategoriesLoading] = useState(true)
+  const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null)
   const recommendRef = React.useRef<HTMLElement>(null)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -19,30 +30,33 @@ export default function HomePage() {
   const { toggleFavorite, isFavorite } = useFavorites()
 
   useEffect(() => {
-    loadProducts()
+    loadCategories()
   }, [])
 
-  const filteredProducts = React.useMemo(() => {
-    let results = products
-    if (activeCategory !== '全部') {
-      const catPrefix = activeCategory.slice(0, 2)
-      results = results.filter(p =>
-        p.name.includes(catPrefix) ||
-        p.description?.includes(catPrefix)
-      )
+  useEffect(() => {
+    loadProducts()
+  }, [activeCategoryId])
+
+  const loadCategories = async () => {
+    try {
+      const response = await categoryApi.getAll()
+      if (response.data && response.data.length > 0) {
+        setCategories(response.data)
+      } else {
+        setCategories(MOCK_CATEGORIES)
+      }
+    } catch (error) {
+      console.error('Failed to load categories:', error)
+      setCategories(MOCK_CATEGORIES)
+    } finally {
+      setCategoriesLoading(false)
     }
-    if (q) {
-      results = results.filter(p =>
-        p.name.toLowerCase().includes(q) ||
-        p.description?.toLowerCase().includes(q)
-      )
-    }
-    return results
-  }, [activeCategory, products, q])
+  }
 
   const loadProducts = async () => {
+    setLoading(true)
     try {
-      const response = await productApi.getAll()
+      const response = await productApi.getAll(activeCategoryId ?? undefined)
       if (response.data && response.data.length > 0) {
         setProducts(response.data)
       } else {
@@ -53,6 +67,29 @@ export default function HomePage() {
       setProducts(MOCK_PRODUCTS)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const filteredProducts = React.useMemo(() => {
+    let results = products
+    if (q) {
+      results = results.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        p.description?.toLowerCase().includes(q)
+      )
+    }
+    return results
+  }, [products, q])
+
+  const activeCategoryName = activeCategoryId
+    ? categories.find(c => c.id === activeCategoryId)?.name || ''
+    : '全部'
+
+  const handleCategoryClick = (categoryId: number) => {
+    if (activeCategoryId === categoryId) {
+      setActiveCategoryId(null)
+    } else {
+      setActiveCategoryId(categoryId)
     }
   }
 
@@ -89,15 +126,25 @@ export default function HomePage() {
                 <Sparkles className="h-4 w-4 text-primary" /> 热点分类
               </h3>
               <div className="grid grid-cols-2 gap-3">
-                {['潮流服装', '智能数码', '美妆护肤', '居家生活', '图书文具', '户外运动'].map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setActiveCategory(cat === activeCategory ? '全部' : cat)}
-                    className={`flex items-center justify-center p-3 rounded-xl transition-all text-[11px] font-bold border ${activeCategory === cat ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-105' : 'bg-secondary-50 dark:bg-secondary-800 text-secondary-600 dark:text-secondary-400 border-transparent dark:border-secondary-700 hover:bg-primary/5 hover:text-primary hover:border-primary/20'}`}
-                  >
-                    {cat}
-                  </button>
-                ))}
+                {categoriesLoading ? (
+                  [...Array(6)].map((_, i) => (
+                    <div
+                      key={i}
+                      className="p-3 rounded-xl bg-secondary-100 dark:bg-secondary-800 animate-pulse h-16"
+                    />
+                  ))
+                ) : (
+                  categories.map(cat => (
+                    <button
+                      key={cat.id}
+                      onClick={() => handleCategoryClick(cat.id)}
+                      className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all text-[11px] font-bold border ${activeCategoryId === cat.id ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-105' : 'bg-secondary-50 dark:bg-secondary-800 text-secondary-600 dark:text-secondary-400 border-transparent dark:border-secondary-700 hover:bg-primary/5 hover:text-primary hover:border-primary/20'}`}
+                    >
+                      <span className="text-xl mb-1">{cat.icon}</span>
+                      <span>{cat.name}</span>
+                    </button>
+                  ))
+                )}
               </div>
             </div>
             <div className="lg:col-span-3 bg-primary/5 dark:bg-primary/10 rounded-2xl p-8 relative overflow-hidden group border border-primary/10 transition-colors">
@@ -120,11 +167,11 @@ export default function HomePage() {
           <section ref={recommendRef}>
             <div className="flex items-end justify-between mb-8">
               <div>
-                <h2 className="text-4xl font-black text-secondary-900 dark:text-white tracking-tighter mb-2">为您推荐 {activeCategory !== '全部' && <span className="text-primary ml-2">/ {activeCategory}</span>}</h2>
+                <h2 className="text-4xl font-black text-secondary-900 dark:text-white tracking-tighter mb-2">为您推荐 {activeCategoryId !== null && <span className="text-primary ml-2">/ {activeCategoryName}</span>}</h2>
                 <div className="flex items-center gap-3"><span className="h-1.5 w-12 bg-primary rounded-full" /><span className="text-sm font-bold text-secondary-400 dark:text-secondary-500 uppercase tracking-widest">Recommended for You</span></div>
               </div>
-              {activeCategory !== '全部' && (
-                <button onClick={() => setActiveCategory('全部')} className="text-xs font-black text-secondary-400 dark:text-secondary-500 hover:text-primary transition-colors flex items-center gap-2 border-b-2 border-transparent hover:border-primary pb-1">清除重置 <X className="h-3 w-3" /></button>
+              {activeCategoryId !== null && (
+                <button onClick={() => setActiveCategoryId(null)} className="text-xs font-black text-secondary-400 dark:text-secondary-500 hover:text-primary transition-colors flex items-center gap-2 border-b-2 border-transparent hover:border-primary pb-1">清除重置 <X className="h-3 w-3" /></button>
               )}
             </div>
 
@@ -168,7 +215,7 @@ export default function HomePage() {
                 </div>
                 <h3 className="text-xl font-black text-secondary-900 dark:text-white mb-2">未找到相关商品</h3>
                 <p className="text-secondary-400 dark:text-secondary-500 text-sm font-bold">换个关键词试试，或者清除过滤条件</p>
-                <button onClick={() => { setActiveCategory('全部'); navigate('/'); }} className="mt-8 px-8 py-3 bg-primary text-white rounded-xl font-black text-xs hover:bg-primary-600 transition-all shadow-lg shadow-primary/20">查看全部商品</button>
+                <button onClick={() => { setActiveCategoryId(null); navigate('/'); }} className="mt-8 px-8 py-3 bg-primary text-white rounded-xl font-black text-xs hover:bg-primary-600 transition-all shadow-lg shadow-primary/20">查看全部商品</button>
               </div>
             )}
           </section>

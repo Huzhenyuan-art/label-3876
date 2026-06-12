@@ -2,6 +2,21 @@ from pydantic import BaseModel
 from datetime import datetime
 
 
+class CategoryBase(BaseModel):
+    name: str
+    icon: str = ""
+    description: str = ""
+    sort_order: int = 0
+
+
+class CategoryResponse(CategoryBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class ShopBase(BaseModel):
     name: str
     logo: str = ""
@@ -29,12 +44,14 @@ class ProductBase(BaseModel):
     images: dict | None = None
     specs: dict | None = None
     shop_id: int
+    category_id: int | None = None
 
 
 class ProductResponse(ProductBase):
     id: int
     created_at: datetime
     shop: ShopResponse | None = None
+    category: CategoryResponse | None = None
 
     class Config:
         from_attributes = True

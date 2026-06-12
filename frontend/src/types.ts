@@ -1,3 +1,12 @@
+export interface Category {
+    id: number
+    name: string
+    icon: string
+    description: string
+    sort_order: number
+    created_at: string
+}
+
 export interface Shop {
     id: number
     name: string
@@ -20,7 +29,9 @@ export interface Product {
     images: { gallery?: string[] } | null
     specs: Record<string, string[]> | null
     shop_id: number
+    category_id: number | null
     shop?: Shop
+    category?: Category
     created_at: string
 }
 

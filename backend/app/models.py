@@ -5,6 +5,21 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
+class Category(Base):
+    __tablename__ = "categories"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    icon: Mapped[str] = mapped_column(String(200), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, default=datetime.datetime.utcnow
+    )
+
+    products: Mapped[list["Product"]] = relationship(back_populates="category", lazy="selectin")
+
+
 class Shop(Base):
     __tablename__ = "shops"
 
@@ -35,11 +50,13 @@ class Product(Base):
     images: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     specs: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     shop_id: Mapped[int] = mapped_column(ForeignKey("shops.id"), nullable=False)
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=datetime.datetime.utcnow
     )
 
     shop: Mapped["Shop"] = relationship(back_populates="products", lazy="selectin")
+    category: Mapped["Category"] = relationship(back_populates="products", lazy="selectin")
 
 
 class ChatMessage(Base):

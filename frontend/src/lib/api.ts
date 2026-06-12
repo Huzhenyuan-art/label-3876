@@ -9,6 +9,15 @@ export const api = axios.create({
   },
 })
 
+export interface Category {
+  id: number
+  name: string
+  icon: string
+  description: string
+  sort_order: number
+  created_at: string
+}
+
 export interface Product {
   id: number
   name: string
@@ -21,7 +30,9 @@ export interface Product {
   images: { gallery?: string[] } | null
   specs: Record<string, string[]> | null
   shop_id: number
+  category_id: number | null
   shop?: Shop
+  category?: Category
   created_at: string
 }
 
@@ -44,8 +55,13 @@ export interface ChatMessage {
   created_at: string
 }
 
+export const categoryApi = {
+  getAll: () => api.get<Category[]>('/categories'),
+  getById: (id: number) => api.get<Category>(`/categories/${id}`),
+}
+
 export const productApi = {
-  getAll: () => api.get<Product[]>('/products'),
+  getAll: (categoryId?: number) => api.get<Product[]>('/products', { params: { category_id: categoryId } }),
   getById: (id: number) => api.get<Product>(`/products/${id}`),
 }
 

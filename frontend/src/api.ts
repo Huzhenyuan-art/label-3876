@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { Product, Shop, ChatMessage } from './types'
+import { Product, Shop, ChatMessage, Category } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8876'
 
@@ -8,8 +8,13 @@ export const api = axios.create({
     headers: { 'Content-Type': 'application/json' },
 })
 
+export const categoryApi = {
+    getAll: () => api.get<Category[]>('/categories'),
+    getById: (id: number) => api.get<Category>(`/categories/${id}`),
+}
+
 export const productApi = {
-    getAll: () => api.get<Product[]>('/products'),
+    getAll: (categoryId?: number) => api.get<Product[]>('/products', { params: { category_id: categoryId } }),
     getById: (id: number) => api.get<Product>(`/products/${id}`),
 }
 

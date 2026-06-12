@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Check, MessageCircle, Star, Heart, Search } from 'lucide-react'
 import { Header } from '../components/Header'
@@ -49,6 +49,25 @@ export default function ShopDetailPage() {
     } finally { setLoading(false) }
   }
 
+  const filteredProducts = useMemo(() => {
+    switch (activeCategory) {
+      case '上新推荐':
+        return [...products].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      case '本周热销':
+        return [...products].sort((a, b) => b.sales - a.sales)
+      case '优惠专区':
+        return [...products]
+          .filter(p => p.original_price !== null && p.original_price > p.price)
+          .sort((a, b) => {
+            const discountA = a.original_price! - a.price
+            const discountB = b.original_price! - b.price
+            return discountB - discountA
+          })
+      default:
+        return products
+    }
+  }, [products, activeCategory])
+
   const toggleFollow = () => {
     setIsFollowed(!isFollowed)
     setFollowers(prev => isFollowed ? prev - 1 : prev + 1)
@@ -97,8 +116,14 @@ export default function ShopDetailPage() {
             </div>
           </aside>
           <div className="flex-1 min-w-0">
+            {filteredProducts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-32 text-secondary-400">
+                <p className="text-lg font-black">{activeCategory}暂无商品</p>
+                <p className="text-xs mt-2">换个分类看看吧</p>
+              </div>
+            ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-8">
-              {products.map(product => (
+              {filteredProducts.map(product => (
                 <Link key={product.id} to={`/product/${product.id}`} className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-secondary-50 flex flex-col">
                   <div className="relative overflow-hidden aspect-[4/5] shrink-0">
                     <img src={product.main_image} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" />
@@ -116,6 +141,7 @@ export default function ShopDetailPage() {
                 </Link>
               ))}
             </div>
+            )}
           </div>
         </div>
       </main>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { User, LoginCredentials, RegisterCredentials, AuthResponse } from '../types'
 import { authApi, setAuthLogoutHandler, setToken, removeToken, getToken } from '../api'
@@ -18,8 +18,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null)
     const [loading, setLoading] = useState(true)
     const navigate = useNavigate()
+    const isInitializing = useRef(true)
 
     const logout = useCallback(() => {
+        if (isInitializing.current) return
         setUser(null)
         removeToken()
         localStorage.removeItem('user')
@@ -33,6 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         const initAuth = async () => {
+            isInitializing.current = true
             const token = getToken()
             const savedUser = localStorage.getItem('user')
 
@@ -55,6 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
             }
             setLoading(false)
+            isInitializing.current = false
         }
 
         initAuth()

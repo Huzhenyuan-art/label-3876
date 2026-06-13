@@ -3,7 +3,8 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import engine, Base, async_session
-from app.models import Shop, Product, ChatMessage, Category
+from app.models import Shop, Product, ChatMessage, Category, User
+from app.auth import get_password_hash
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -508,6 +509,25 @@ async def seed_data():
             ),
         ]
         session.add_all(messages)
+
+        # 创建测试用户
+        test_users = [
+            User(
+                username="testuser",
+                email="test@example.com",
+                hashed_password=get_password_hash("123456"),
+                avatar="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop",
+                nickname="测试用户"
+            ),
+            User(
+                username="admin",
+                email="admin@example.com",
+                hashed_password=get_password_hash("admin123"),
+                avatar="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop",
+                nickname="管理员"
+            ),
+        ]
+        session.add_all(test_users)
 
         await session.commit()
         logger.info("Seed data created successfully!")

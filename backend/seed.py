@@ -511,18 +511,20 @@ async def seed_data():
         session.add_all(messages)
 
         # 创建测试用户
+        admin_password = "admin123"
+        test_password = "123456"
         test_users = [
             User(
                 username="testuser",
                 email="test@example.com",
-                hashed_password=get_password_hash("123456"),
+                hashed_password=get_password_hash(test_password),
                 avatar="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop",
                 nickname="测试用户"
             ),
             User(
                 username="admin",
                 email="admin@example.com",
-                hashed_password=get_password_hash("admin123"),
+                hashed_password=get_password_hash(admin_password),
                 avatar="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop",
                 nickname="管理员"
             ),
@@ -530,7 +532,14 @@ async def seed_data():
         session.add_all(test_users)
 
         await session.commit()
+        logger.info("=" * 60)
         logger.info("Seed data created successfully!")
+        logger.info("")
+        logger.info("测试账号：")
+        logger.info(f"  管理员账号: admin / {admin_password}")
+        logger.info(f"  普通用户账号: testuser / {test_password}")
+        logger.info("")
+        logger.info("=" * 60)
 
 
 if __name__ == "__main__":

@@ -25,14 +25,14 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     if result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already registered"
+            detail="用户名已被注册"
         )
 
     result = await db.execute(select(User).where(User.email == user_data.email))
     if result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+            detail="邮箱已被注册"
         )
 
     hashed_password = get_password_hash(user_data.password)
@@ -54,7 +54,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create user"
+            detail="创建用户失败，请稍后重试"
         )
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -84,7 +84,7 @@ async def login(login_data: UserLogin, db: AsyncSession = Depends(get_db)):
     if not user or not verify_password(login_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
+            detail="用户名或密码错误",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

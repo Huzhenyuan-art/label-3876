@@ -1,3 +1,47 @@
+# FIX_GUIDE
+
+---
+
+## 首页商品加载异常 & 登录请求异常
+
+### 问题描述
+
+进入首页商品加载异常（一直转圈或显示 fallback mock 数据），进入登录页面点击登录同样报错，所有 API 请求均无法正常工作。
+
+### 根因分析
+
+在认证体系重构过程中，`API_BASE_URL` 的默认值被错误地修改为空字符串：
+
+```typescript
+// 错误代码 — 默认值为空字符串，导致请求发到前端自身域名
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+```
+
+当 `VITE_API_BASE_URL` 环境变量未设置时，`API_BASE_URL` 为空字符串，axios 的 `baseURL` 变成 `/api`，所有请求被发送到前端开发服务器域名（如 `http://localhost:3876/api/...`）而非后端 API 服务 `http://localhost:8876/api/...`，导致全部请求 404 或 CORS 失败。
+
+### 修复方案
+
+将 `API_BASE_URL` 的 fallback 默认值恢复为 `'http://localhost:8876'`：
+
+```typescript
+// 修复后
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8876'
+```
+
+### 修复涉及文件
+
+| 文件 | 改动 |
+|------|------|
+| `frontend/src/api.ts` | 第 4 行：`''` → `'http://localhost:8876'` |
+| `frontend/src/lib/api.ts` | 第 4 行：`''` → `'http://localhost:8876'` |
+
+### 预防措施
+
+- 修改 API 基础配置时务必检查 fallback 默认值
+- 可在 `vite.config.ts` 中通过 `define` 注入默认值，避免多处硬编码
+
+---
+
 # FIX_GUIDE — 同类推荐未按分类过滤
 
 ## 问题描述

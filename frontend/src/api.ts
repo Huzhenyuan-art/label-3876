@@ -30,10 +30,12 @@ export const productApi = {
                 }
             } catch { /* fallback to empty */ }
         }
-        await Promise.all([
-            fetchAndMerge(() => productApi.getAll(categoryId ?? undefined), 0),
-            fetchAndMerge(() => shopApi.getProducts(shopId), 1),
-        ])
+        const tasks: Promise<void>[] = []
+        if (categoryId != null) {
+            tasks.push(fetchAndMerge(() => productApi.getAll(categoryId), 0))
+        }
+        tasks.push(fetchAndMerge(() => shopApi.getProducts(shopId), 1))
+        await Promise.all(tasks)
         results.sort((a, b) => ((a as any)._priority ?? 0) - ((b as any)._priority ?? 0))
         return results.map(({ _priority, ...rest }: any) => rest)
     },

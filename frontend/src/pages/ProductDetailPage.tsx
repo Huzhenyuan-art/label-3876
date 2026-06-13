@@ -26,26 +26,22 @@ export default function ProductDetailPage() {
   const [recLoading, setRecLoading] = useState(false)
 
   useEffect(() => {
-    if (id) {
-      loadProduct(parseInt(id))
-      loadRecommended(parseInt(id))
-    }
+    if (id) loadProduct(parseInt(id))
   }, [id])
 
-  const loadRecommended = async (productId: number) => {
+  const loadRecommended = async (catId: number | null, shopId: number, productId: number) => {
     setRecLoading(true)
     try {
-      const current = MOCK_PRODUCTS.find(p => p.id === productId)
-      const catId = current?.category_id ?? null
-      const shopId = current?.shop_id ?? 0
       const list = await productApi.getRecommended(catId, shopId, productId)
       if (list.length > 0) {
         setRecommended(list)
       } else {
-        setRecommended(MOCK_PRODUCTS.filter(p => p.id !== productId))
+        const fallback = MOCK_PRODUCTS.filter(p => p.id !== productId)
+        setRecommended(catId != null ? fallback.filter(p => p.category_id === catId) : fallback.filter(p => p.shop_id === shopId))
       }
     } catch {
-      setRecommended(MOCK_PRODUCTS.filter(p => p.id !== productId))
+      const fallback = MOCK_PRODUCTS.filter(p => p.id !== productId)
+      setRecommended(catId != null ? fallback.filter(p => p.category_id === catId) : fallback.filter(p => p.shop_id === shopId))
     } finally {
       setRecLoading(false)
     }
@@ -54,16 +50,21 @@ export default function ProductDetailPage() {
   const loadProduct = async (productId: number) => {
     try {
       const response = await productApi.getById(productId)
-      setProduct(response.data)
-      if (response.data.specs) {
+      const p = response.data
+      setProduct(p)
+      if (p.specs) {
         const initialSpecs: Record<string, string> = {}
-        Object.entries(response.data.specs).forEach(([key, values]) => { initialSpecs[key] = values[0] })
+        Object.entries(p.specs).forEach(([key, values]) => { initialSpecs[key] = values[0] })
         setSelectedSpecs(initialSpecs)
       }
+      loadRecommended(p.category_id, p.shop_id, productId)
     } catch (error) {
       console.error(error)
       const mockProduct = MOCK_PRODUCTS.find(p => p.id === productId)
-      if (mockProduct) setProduct(mockProduct)
+      if (mockProduct) {
+        setProduct(mockProduct)
+        loadRecommended(mockProduct.category_id, mockProduct.shop_id, productId)
+      }
     } finally { setLoading(false) }
   }
 

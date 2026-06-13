@@ -1,12 +1,13 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { ArrowLeft, Camera, Mail, User as UserIcon, Shield, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function ProfilePage() {
     const navigate = useNavigate()
-    const { user: authUser, logout } = useAuth()
+    const { user: authUser, logout, updateUser } = useAuth()
     const [isEditing, setIsEditing] = useState(false)
+    const [isSaving, setIsSaving] = useState(false)
     const [user, setUser] = useState({
         name: authUser?.nickname || 'PREMIUM USER',
         username: authUser?.username || 'antigravity_dev',
@@ -16,10 +17,33 @@ export default function ProfilePage() {
     })
     const [editForm, setEditForm] = useState({ ...user })
 
-    const handleSave = (e: React.FormEvent) => {
+    useEffect(() => {
+        if (authUser) {
+            setUser(prev => ({
+                ...prev,
+                name: authUser.nickname,
+                username: authUser.username,
+                email: authUser.email,
+            }))
+        }
+    }, [authUser])
+
+    const handleSave = async (e: React.FormEvent) => {
         e.preventDefault()
-        setUser({ ...editForm })
-        setIsEditing(false)
+        setIsSaving(true)
+        try {
+            await updateUser({
+                nickname: editForm.name,
+                username: editForm.username,
+                email: editForm.email,
+            })
+            setIsEditing(false)
+        } catch (error) {
+            console.error('Failed to update profile:', error)
+            alert('保存失败，请稍后重试')
+        } finally {
+            setIsSaving(false)
+        }
     }
 
     return (
@@ -198,15 +222,17 @@ export default function ProfilePage() {
                                 <button
                                     type="button"
                                     onClick={() => setIsEditing(false)}
-                                    className="flex-1 px-8 py-4 bg-secondary-50 text-secondary-400 rounded-2xl font-black text-xs hover:bg-secondary-100 transition-all uppercase tracking-widest"
+                                    disabled={isSaving}
+                                    className="flex-1 px-8 py-4 bg-secondary-50 text-secondary-400 rounded-2xl font-black text-xs hover:bg-secondary-100 transition-all uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     取消
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 px-8 py-4 bg-primary text-white rounded-2xl font-black text-xs hover:bg-primary-600 transition-all shadow-xl shadow-primary/20 uppercase tracking-widest"
+                                    disabled={isSaving}
+                                    className="flex-1 px-8 py-4 bg-primary text-white rounded-2xl font-black text-xs hover:bg-primary-600 transition-all shadow-xl shadow-primary/20 uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    保存修改
+                                    {isSaving ? '保存中...' : '保存修改'}
                                 </button>
                             </div>
                         </form>

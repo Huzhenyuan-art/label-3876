@@ -1,13 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { User, LoginCredentials, RegisterCredentials, AuthResponse } from '../types'
-import { authApi, setAuthLogoutHandler, setToken, removeToken, getToken } from '../api'
+import { authApi, setAuthLogoutHandler, setToken, removeToken, getToken, UpdateProfileData } from '../api'
 
 interface AuthContextType {
     user: User | null
     login: (credentials: LoginCredentials) => Promise<AuthResponse>
     register: (credentials: RegisterCredentials) => Promise<AuthResponse>
     logout: () => void
+    updateUser: (data: UpdateProfileData) => Promise<User>
     isAuthenticated: boolean
     loading: boolean
 }
@@ -80,8 +81,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return data
     }
 
+    const updateUser = async (data: UpdateProfileData): Promise<User> => {
+        const { data: updatedUser } = await authApi.updateProfile(data)
+        setUser(updatedUser)
+        localStorage.setItem('user', JSON.stringify(updatedUser))
+        return updatedUser
+    }
+
     return (
-        <AuthContext.Provider value={{ user, login, register, logout, isAuthenticated: !!user, loading }}>
+        <AuthContext.Provider value={{ user, login, register, logout, updateUser, isAuthenticated: !!user, loading }}>
             {children}
         </AuthContext.Provider>
     )

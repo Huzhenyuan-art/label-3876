@@ -38,6 +38,12 @@ api.interceptors.response.use(
     }
 )
 
+export interface UpdateProfileData {
+    nickname?: string
+    email?: string
+    username?: string
+}
+
 export const authApi = {
     login: (credentials: LoginCredentials) =>
         api.post<AuthResponse>('/auth/login', credentials),
@@ -47,6 +53,9 @@ export const authApi = {
 
     getCurrentUser: () =>
         api.get<User>('/auth/me'),
+
+    updateProfile: (data: UpdateProfileData) =>
+        api.put<User>('/auth/me', data),
 }
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY)

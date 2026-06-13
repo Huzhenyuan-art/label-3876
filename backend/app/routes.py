@@ -9,11 +9,11 @@ from app.database import get_db
 from app.models import Product, Shop, ChatMessage, Category, User
 from app.schemas import (
     ProductResponse, ShopResponse, ChatMessageResponse, ChatMessageCreate,
-    CategoryResponse, UserCreate, UserLogin, UserResponse, Token
+    CategoryResponse, UserCreate, UserLogin, UserResponse, Token, UserUpdate
 )
 from app.auth import (
     verify_password, get_password_hash, create_access_token,
-    get_current_active_user
+    get_current_active_user, get_current_user
 )
 
 router = APIRouter()
@@ -110,6 +110,53 @@ async def login(login_data: UserLogin, db: AsyncSession = Depends(get_db)):
 @router.get("/auth/me", response_model=UserResponse)
 async def read_users_me(current_user: UserResponse = Depends(get_current_active_user)):
     return current_user
+
+
+@router.put("/auth/me", response_model=UserResponse)
+async def update_user_profile(
+    user_data: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if user_data.username is not None:
+        existing = await db.execute(select(User).where(User.username == user_data.username, User.id != current_user.id))
+        if existing.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="用户名已被使用"
+            )
+        current_user.username = user_data.username
+
+    if user_data.email is not None:
+        existing = await db.execute(select(User).where(User.email == user_data.email, User.id != current_user.id))
+        if existing.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="邮箱已被使用"
+            )
+        current_user.email = user_data.email
+
+    if user_data.nickname is not None:
+        current_user.nickname = user_data.nickname
+
+    try:
+        await db.commit()
+        await db.refresh(current_user)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="更新用户资料失败"
+        )
+
+    return UserResponse(
+        id=current_user.id,
+        username=current_user.username,
+        email=current_user.email,
+        avatar=current_user.avatar,
+        nickname=current_user.nickname,
+        created_at=current_user.created_at,
+    )
 
 
 @router.get("/categories", response_model=list[CategoryResponse])

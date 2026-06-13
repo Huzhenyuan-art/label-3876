@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react'
+import React, { createContext, useContext, useState, useEffect } from 'react'
 import { Product } from '../types'
 
 interface FavoritesContextType {
@@ -9,8 +9,26 @@ interface FavoritesContextType {
 
 const FavoritesContext = createContext<FavoritesContextType | undefined>(undefined)
 
+const STORAGE_KEY = 'favorites'
+
 export function FavoritesProvider({ children }: { children: React.ReactNode }) {
-    const [favorites, setFavorites] = useState<Product[]>([])
+    const [favorites, setFavorites] = useState<Product[]>(() => {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY)
+            return saved ? JSON.parse(saved) : []
+        } catch (error) {
+            console.error('Failed to parse favorites from localStorage:', error)
+            return []
+        }
+    })
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(favorites))
+        } catch (error) {
+            console.error('Failed to save favorites to localStorage:', error)
+        }
+    }, [favorites])
 
     const toggleFavorite = (product: Product) => {
         setFavorites((prev) => {

@@ -7,7 +7,7 @@ import { useCart } from '../contexts/CartContext'
 
 export default function FavoritesPage() {
     const navigate = useNavigate()
-    const { favorites, toggleFavorite } = useFavorites()
+    const { favorites, toggleFavorite, isFavorite } = useFavorites()
     const { addToCart } = useCart()
 
     return (
@@ -38,9 +38,9 @@ export default function FavoritesPage() {
                                     <div className="absolute top-4 right-4">
                                         <button
                                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFavorite(product); }}
-                                            className="w-10 h-10 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center text-primary shadow-lg border border-white hover:bg-white transition-all transform hover:scale-110 active:scale-90"
+                                            className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg border transition-all transform hover:scale-110 active:scale-90 ${isFavorite(product.id) ? 'bg-primary text-white scale-110 shadow-primary/30 border-white' : 'bg-white/80 backdrop-blur-md text-primary border-white hover:bg-white'}`}
                                         >
-                                            <Heart className="h-5 w-5 fill-primary" />
+                                            <Heart className={`h-5 w-5 ${isFavorite(product.id) ? 'fill-current' : ''}`} />
                                         </button>
                                     </div>
                                 </Link>

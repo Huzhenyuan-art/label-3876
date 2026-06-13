@@ -1,48 +1,83 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User } from '../types'
+import { User, LoginCredentials, RegisterCredentials, AuthResponse } from '../types'
+import { authApi, setAuthLogoutHandler, setToken, removeToken, getToken } from '../api'
 
 interface AuthContextType {
     user: User | null
-    login: (credentials: { username: string }) => Promise<void>
+    login: (credentials: LoginCredentials) => Promise<AuthResponse>
+    register: (credentials: RegisterCredentials) => Promise<AuthResponse>
     logout: () => void
     isAuthenticated: boolean
+    loading: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null)
+    const [loading, setLoading] = useState(true)
     const navigate = useNavigate()
 
+    const logout = useCallback(() => {
+        setUser(null)
+        removeToken()
+        localStorage.removeItem('user')
+        navigate('/login')
+    }, [navigate])
+
     useEffect(() => {
-        const savedUser = localStorage.getItem('user')
-        if (savedUser) {
-            setUser(JSON.parse(savedUser))
+        setAuthLogoutHandler(logout)
+        return () => setAuthLogoutHandler(null)
+    }, [logout])
+
+    useEffect(() => {
+        const initAuth = async () => {
+            const token = getToken()
+            const savedUser = localStorage.getItem('user')
+
+            if (token) {
+                try {
+                    const { data } = await authApi.getCurrentUser()
+                    setUser(data)
+                    localStorage.setItem('user', JSON.stringify(data))
+                } catch {
+                    removeToken()
+                    localStorage.removeItem('user')
+                    setUser(null)
+                }
+            } else if (savedUser) {
+                try {
+                    const parsedUser = JSON.parse(savedUser) as User
+                    setUser(parsedUser)
+                } catch {
+                    localStorage.removeItem('user')
+                }
+            }
+            setLoading(false)
         }
+
+        initAuth()
     }, [])
 
-    const login = async (credentials: { username: string }) => {
-        // Mock login
-        const mockUser: User = {
-            id: 1,
-            username: credentials.username,
-            email: `${credentials.username}@example.com`,
-            avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop',
-            nickname: credentials.username.toUpperCase()
-        }
-        setUser(mockUser)
-        localStorage.setItem('user', JSON.stringify(mockUser))
+    const login = async (credentials: LoginCredentials): Promise<AuthResponse> => {
+        const { data } = await authApi.login(credentials)
+        setToken(data.access_token)
+        setUser(data.user)
+        localStorage.setItem('user', JSON.stringify(data.user))
+        return data
     }
 
-    const logout = () => {
-        setUser(null)
-        localStorage.removeItem('user')
-        navigate('/')
+    const register = async (credentials: RegisterCredentials): Promise<AuthResponse> => {
+        const { data } = await authApi.register(credentials)
+        setToken(data.access_token)
+        setUser(data.user)
+        localStorage.setItem('user', JSON.stringify(data.user))
+        return data
     }
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+        <AuthContext.Provider value={{ user, login, register, logout, isAuthenticated: !!user, loading }}>
             {children}
         </AuthContext.Provider>
     )
@@ -55,14 +90,22 @@ export function useAuth() {
 }
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-    const { isAuthenticated } = useAuth()
+    const { isAuthenticated, loading } = useAuth()
     const navigate = useNavigate()
 
     useEffect(() => {
-        if (!isAuthenticated) {
+        if (!loading && !isAuthenticated) {
             navigate('/login')
         }
-    }, [isAuthenticated, navigate])
+    }, [isAuthenticated, loading, navigate])
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-secondary-900 flex items-center justify-center">
+                <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin"></div>
+            </div>
+        )
+    }
 
     return isAuthenticated ? <>{children}</> : null
 }

@@ -1,13 +1,15 @@
 import React, { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, User, Lock, Mail, ChevronRight, Zap, ShieldCheck } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, User, Lock, Mail, ChevronRight, Zap, ShieldCheck, AlertCircle } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { AxiosError } from 'axios'
 
 export default function LoginPage() {
     const navigate = useNavigate()
-    const { login } = useAuth()
+    const { login, register } = useAuth()
     const [isLogin, setIsLogin] = useState(true)
     const [loading, setLoading] = useState(false)
+    const [error, setError] = useState('')
     const [formData, setFormData] = useState({
         username: '',
         password: '',
@@ -17,12 +19,30 @@ export default function LoginPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
-        // Mock API delay
-        setTimeout(async () => {
-            await login({ username: formData.username })
-            setLoading(false)
+        setError('')
+
+        try {
+            if (isLogin) {
+                await login({
+                    username: formData.username,
+                    password: formData.password
+                })
+            } else {
+                await register({
+                    username: formData.username,
+                    email: formData.email,
+                    password: formData.password
+                })
+            }
             navigate('/')
-        }, 1500)
+        } catch (err) {
+            const axiosError = err as AxiosError<{ detail?: string }>
+            const errorMessage = axiosError.response?.data?.detail ||
+                (isLogin ? '登录失败，请检查用户名和密码' : '注册失败，请稍后重试')
+            setError(errorMessage)
+        } finally {
+            setLoading(false)
+        }
     }
 
     return (
@@ -93,6 +113,13 @@ export default function LoginPage() {
                             />
                         </div>
 
+                        {error && (
+                            <div className="flex items-center gap-2 text-red-400 text-sm bg-red-500/10 px-4 py-3 rounded-xl animate-in slide-in-from-top-2 duration-300">
+                                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                                <span className="font-bold">{error}</span>
+                            </div>
+                        )}
+
                         <button
                             type="submit"
                             disabled={loading}
@@ -108,6 +135,19 @@ export default function LoginPage() {
                             )}
                         </button>
                     </form>
+
+                    <div className="mt-8 text-center">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setIsLogin(!isLogin)
+                                setError('')
+                            }}
+                            className="text-secondary-400 hover:text-white font-bold text-xs uppercase tracking-[0.2em] transition-colors"
+                        >
+                            {isLogin ? '还没有账号？立即注册' : '已有账号？立即登录'}
+                        </button>
+                    </div>
 
                 </div>
 

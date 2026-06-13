@@ -1,6 +1,8 @@
-import axios from 'axios'
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
+import { Product, Shop, ChatMessage, Category, LoginCredentials, RegisterCredentials, AuthResponse, User } from '../types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8876'
+const TOKEN_KEY = 'token'
 
 export const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,
@@ -9,53 +11,49 @@ export const api = axios.create({
   },
 })
 
-export interface Category {
-  id: number
-  name: string
-  icon: string
-  description: string
-  sort_order: number
-  created_at: string
+api.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    const token = localStorage.getItem(TOKEN_KEY)
+    if (token && config.headers) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => Promise.reject(error)
+)
+
+let authLogoutHandler: (() => void) | null = null
+
+export const setAuthLogoutHandler = (handler: (() => void) | null) => {
+  authLogoutHandler = handler
 }
 
-export interface Product {
-  id: number
-  name: string
-  description: string
-  price: number
-  original_price: number | null
-  stock: number
-  sales: number
-  main_image: string
-  images: { gallery?: string[] } | null
-  specs: Record<string, string[]> | null
-  shop_id: number
-  category_id: number | null
-  shop?: Shop
-  category?: Category
-  created_at: string
+api.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem(TOKEN_KEY)
+      localStorage.removeItem('user')
+      authLogoutHandler?.()
+    }
+    return Promise.reject(error)
+  }
+)
+
+export const authApi = {
+  login: (credentials: LoginCredentials) =>
+    api.post<AuthResponse>('/auth/login', credentials),
+
+  register: (credentials: RegisterCredentials) =>
+    api.post<AuthResponse>('/auth/register', credentials),
+
+  getCurrentUser: () =>
+    api.get<User>('/auth/me'),
 }
 
-export interface Shop {
-  id: number
-  name: string
-  logo: string
-  description: string
-  rating: number
-  follower_count: number
-  created_at: string
-}
-
-export interface ChatMessage {
-  id: number
-  shop_id: number
-  sender: string
-  content: string
-  msg_type: string
-  created_at: string
-  status?: 'sending' | 'sent' | 'failed'
-  client_id?: string
-}
+export const getToken = () => localStorage.getItem(TOKEN_KEY)
+export const setToken = (token: string) => localStorage.setItem(TOKEN_KEY, token)
+export const removeToken = () => localStorage.removeItem(TOKEN_KEY)
 
 export const categoryApi = {
   getAll: () => api.get<Category[]>('/categories'),
@@ -65,6 +63,29 @@ export const categoryApi = {
 export const productApi = {
   getAll: (categoryId?: number) => api.get<Product[]>('/products', { params: { category_id: categoryId } }),
   getById: (id: number) => api.get<Product>(`/products/${id}`),
+  getRecommended: async (categoryId: number | null, shopId: number, excludeId: number): Promise<Product[]> => {
+    const results: Product[] = []
+    const seen = new Set<number>()
+    const fetchAndMerge = async (fetcher: () => Promise<{ data: Product[] }>, priority: number) => {
+      try {
+        const { data } = await fetcher()
+        for (const p of data) {
+          if (p.id !== excludeId && !seen.has(p.id)) {
+            seen.add(p.id)
+            results.push({ ...p, _priority: priority } as Product & { _priority: number })
+          }
+        }
+      } catch { /* fallback to empty */ }
+    }
+    const tasks: Promise<void>[] = []
+    if (categoryId != null) {
+      tasks.push(fetchAndMerge(() => productApi.getAll(categoryId), 0))
+    }
+    tasks.push(fetchAndMerge(() => shopApi.getProducts(shopId), 1))
+    await Promise.all(tasks)
+    results.sort((a, b) => ((a as any)._priority ?? 0) - ((b as any)._priority ?? 0))
+    return results.map(({ _priority, ...rest }: any) => rest)
+  },
 }
 
 export const shopApi = {

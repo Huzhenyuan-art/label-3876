@@ -62,6 +62,7 @@ class ChatMessageBase(BaseModel):
     sender: str
     content: str
     msg_type: str = "text"
+    client_id: str | None = None
 
 
 class ChatMessageResponse(ChatMessageBase):
@@ -75,3 +76,4 @@ class ChatMessageResponse(ChatMessageBase):
 class ChatMessageCreate(BaseModel):
     content: str
     sender: str = "buyer"
+    client_id: str | None = None

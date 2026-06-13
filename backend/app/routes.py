@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.database import get_db
 from app.models import Product, Shop, ChatMessage, Category
@@ -78,10 +79,45 @@ async def get_chat_messages(shop_id: int, db: AsyncSession = Depends(get_db)):
 async def send_message(
     shop_id: int, message: ChatMessageCreate, db: AsyncSession = Depends(get_db)
 ):
+    shop_result = await db.execute(select(Shop).where(Shop.id == shop_id))
+    if not shop_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Shop not found")
+
+    trimmed_content = message.content.strip()
+    if not trimmed_content:
+        raise HTTPException(status_code=400, detail="Message content cannot be empty")
+
+    if message.sender not in ("buyer", "seller"):
+        raise HTTPException(status_code=400, detail="Invalid sender, must be 'buyer' or 'seller'")
+
+    if message.client_id:
+        existing = await db.execute(
+            select(ChatMessage).where(ChatMessage.client_id == message.client_id)
+        )
+        existing_msg = existing.scalar_one_or_none()
+        if existing_msg:
+            return existing_msg
+
     new_message = ChatMessage(
-        shop_id=shop_id, sender=message.sender, content=message.content
+        shop_id=shop_id,
+        sender=message.sender,
+        content=trimmed_content,
+        client_id=message.client_id,
     )
     db.add(new_message)
-    await db.commit()
-    await db.refresh(new_message)
-    return new_message
+    try:
+        await db.commit()
+        await db.refresh(new_message)
+        return new_message
+    except IntegrityError:
+        await db.rollback()
+        if message.client_id:
+            retry_existing = await db.execute(
+                select(ChatMessage).where(ChatMessage.client_id == message.client_id)
+            )
+            retry_msg = retry_existing.scalar_one_or_none()
+            if retry_msg:
+                return retry_msg
+        raise HTTPException(
+            status_code=500, detail="Failed to save message due to database conflict"
+        )

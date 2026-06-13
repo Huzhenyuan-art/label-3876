@@ -42,6 +42,8 @@ export interface ChatMessage {
     content: string
     msg_type: string
     created_at: string
+    status?: 'sending' | 'sent' | 'failed'
+    client_id?: string
 }
 
 export interface User {

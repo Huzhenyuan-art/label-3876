@@ -25,6 +25,6 @@ export const shopApi = {
 
 export const chatApi = {
     getMessages: (shopId: number) => api.get<ChatMessage[]>(`/chat/${shopId}`),
-    sendMessage: (shopId: number, content: string, sender: string = 'buyer') =>
-        api.post<ChatMessage>(`/chat/${shopId}`, { content, sender }),
+    sendMessage: (shopId: number, content: string, sender: string = 'buyer', clientId?: string) =>
+        api.post<ChatMessage>(`/chat/${shopId}`, { content, sender, client_id: clientId }),
 }

@@ -67,6 +67,7 @@ class ChatMessage(Base):
     sender: Mapped[str] = mapped_column(String(20), nullable=False)  # "buyer" or "seller"
     content: Mapped[str] = mapped_column(Text, nullable=False)
     msg_type: Mapped[str] = mapped_column(String(20), default="text")
+    client_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=datetime.datetime.utcnow
     )

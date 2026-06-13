@@ -16,6 +16,27 @@ export const categoryApi = {
 export const productApi = {
     getAll: (categoryId?: number) => api.get<Product[]>('/products', { params: { category_id: categoryId } }),
     getById: (id: number) => api.get<Product>(`/products/${id}`),
+    getRecommended: async (categoryId: number | null, shopId: number, excludeId: number): Promise<Product[]> => {
+        const results: Product[] = []
+        const seen = new Set<number>()
+        const fetchAndMerge = async (fetcher: () => Promise<{ data: Product[] }>, priority: number) => {
+            try {
+                const { data } = await fetcher()
+                for (const p of data) {
+                    if (p.id !== excludeId && !seen.has(p.id)) {
+                        seen.add(p.id)
+                        results.push({ ...p, _priority: priority } as Product & { _priority: number })
+                    }
+                }
+            } catch { /* fallback to empty */ }
+        }
+        await Promise.all([
+            fetchAndMerge(() => productApi.getAll(categoryId ?? undefined), 0),
+            fetchAndMerge(() => shopApi.getProducts(shopId), 1),
+        ])
+        results.sort((a, b) => ((a as any)._priority ?? 0) - ((b as any)._priority ?? 0))
+        return results.map(({ _priority, ...rest }: any) => rest)
+    },
 }
 
 export const shopApi = {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Minus, Plus, MessageCircle, Store, ShoppingCart, Check, Heart } from 'lucide-react'
+import { Minus, Plus, MessageCircle, Store, ShoppingCart, Check, Heart, Sparkles, Zap } from 'lucide-react'
 import { Header } from '../components/Header'
 import { Product } from '../types'
 import { productApi } from '../api'
@@ -22,10 +22,34 @@ export default function ProductDetailPage() {
   const [quantity, setQuantity] = useState(1)
   const [isAdding, setIsAdding] = useState(false)
   const [showToast, setShowToast] = useState(false)
+  const [recommended, setRecommended] = useState<Product[]>([])
+  const [recLoading, setRecLoading] = useState(false)
 
   useEffect(() => {
-    if (id) loadProduct(parseInt(id))
+    if (id) {
+      loadProduct(parseInt(id))
+      loadRecommended(parseInt(id))
+    }
   }, [id])
+
+  const loadRecommended = async (productId: number) => {
+    setRecLoading(true)
+    try {
+      const current = MOCK_PRODUCTS.find(p => p.id === productId)
+      const catId = current?.category_id ?? null
+      const shopId = current?.shop_id ?? 0
+      const list = await productApi.getRecommended(catId, shopId, productId)
+      if (list.length > 0) {
+        setRecommended(list)
+      } else {
+        setRecommended(MOCK_PRODUCTS.filter(p => p.id !== productId))
+      }
+    } catch {
+      setRecommended(MOCK_PRODUCTS.filter(p => p.id !== productId))
+    } finally {
+      setRecLoading(false)
+    }
+  }
 
   const loadProduct = async (productId: number) => {
     try {
@@ -129,6 +153,45 @@ export default function ProductDetailPage() {
             </div>
           </div>
         </div>
+        {recommended.length > 0 && (
+          <section className="mt-16">
+            <div className="flex items-center gap-3 mb-8">
+              <Sparkles className="h-6 w-6 text-primary" />
+              <h2 className="text-3xl font-black text-secondary-900 dark:text-white tracking-tighter">同类推荐</h2>
+              <span className="h-1.5 w-12 bg-primary rounded-full" />
+              <span className="text-sm font-bold text-secondary-400 dark:text-secondary-500 uppercase tracking-widest">Similar Products</span>
+            </div>
+            {recLoading ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="bg-white dark:bg-secondary-900 rounded-2xl p-4 shadow-xl border border-secondary-50 dark:border-secondary-800 animate-pulse">
+                    <div className="w-full aspect-square bg-secondary-100 dark:bg-secondary-800 rounded-xl mb-4" />
+                    <div className="h-4 bg-secondary-100 dark:bg-secondary-800 rounded w-3/4 mb-3" />
+                    <div className="h-6 bg-secondary-100 dark:bg-secondary-800 rounded w-1/2" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                {recommended.map((item) => (
+                  <Link key={item.id} to={`/product/${item.id}`} className="group bg-white dark:bg-secondary-900 rounded-2xl shadow-xl shadow-secondary-200/20 dark:shadow-black/20 overflow-hidden hover:shadow-2xl hover:shadow-primary/10 transition-all duration-500 hover:-translate-y-2 border border-secondary-50 dark:border-secondary-800 flex flex-col">
+                    <div className="relative overflow-hidden aspect-[4/5] shrink-0">
+                      <img src={item.main_image} alt={item.name} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                      <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-secondary-900/60 to-transparent group-hover:from-primary/60 transition-colors" />
+                    </div>
+                    <div className="p-5 flex-1 flex flex-col justify-between">
+                      <h3 className="font-black text-secondary-900 dark:text-white mb-3 line-clamp-2 text-xs leading-tight group-hover:text-primary transition-colors uppercase tracking-tight">{item.name}</h3>
+                      <div className="flex items-center justify-between">
+                        <span className="text-lg font-black text-primary tracking-tighter italic"><span className="text-xs mr-0.5 not-italic">¥</span>{item.price.toFixed(2)}</span>
+                        <div className="bg-secondary-50 dark:bg-secondary-800 group-hover:bg-primary group-hover:text-white p-2 rounded-xl transition-all active:scale-75 shadow-sm"><Zap className="h-3.5 w-3.5" /></div>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
       </main>
       <div className="fixed bottom-0 inset-x-0 bg-white/80 dark:bg-secondary-900/80 backdrop-blur-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.08)] border-t border-secondary-50 dark:border-secondary-800 z-50 transition-colors">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-6">

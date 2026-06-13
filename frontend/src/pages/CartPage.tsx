@@ -3,14 +3,20 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ShoppingBag, Trash2, Minus, Plus, Zap, Check, ShieldCheck, Circle } from 'lucide-react'
 import { Header } from '../components/Header'
 import { useCart } from '../contexts/CartContext'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function CartPage() {
     const navigate = useNavigate()
     const { items, updateQuantity, removeFromCart, totalPrice, totalItems, clearCart, toggleSelect, toggleSelectAll, removeSelected, selectedItems, selectedTotalPrice, isAllSelected } = useCart()
+    const { isAuthenticated } = useAuth()
     const [isProcessing, setIsProcessing] = useState(false)
     const [showSuccess, setShowSuccess] = useState(false)
 
     const handleCheckout = () => {
+        if (!isAuthenticated) {
+            navigate('/login', { state: { from: '/cart' } })
+            return
+        }
         setIsProcessing(true)
         setTimeout(() => {
             setIsProcessing(false)

@@ -6,6 +6,7 @@ import { Product } from '../types'
 import { productApi } from '../api'
 import { useCart } from '../contexts/CartContext'
 import { useFavorites } from '../contexts/FavoritesContext'
+import { useAuth } from '../contexts/AuthContext'
 
 import { MOCK_PRODUCTS } from '../mocks'
 

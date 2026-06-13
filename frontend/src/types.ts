@@ -55,4 +55,5 @@ export interface User {
 export interface CartItem extends Product {
     quantity: number
     selectedSpecs?: Record<string, string>
+    selected?: boolean
 }

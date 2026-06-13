@@ -1,12 +1,12 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ShoppingBag, Trash2, Minus, Plus, Zap, Check, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, ShoppingBag, Trash2, Minus, Plus, Zap, Check, ShieldCheck, Circle } from 'lucide-react'
 import { Header } from '../components/Header'
 import { useCart } from '../contexts/CartContext'
 
 export default function CartPage() {
     const navigate = useNavigate()
-    const { items, updateQuantity, removeFromCart, totalPrice, totalItems, clearCart } = useCart()
+    const { items, updateQuantity, removeFromCart, totalPrice, totalItems, clearCart, toggleSelect, toggleSelectAll, removeSelected, selectedItems, selectedTotalPrice, isAllSelected } = useCart()
     const [isProcessing, setIsProcessing] = useState(false)
     const [showSuccess, setShowSuccess] = useState(false)
 
@@ -17,7 +17,7 @@ export default function CartPage() {
             setShowSuccess(true)
             setTimeout(() => {
                 setShowSuccess(false)
-                clearCart()
+                removeSelected()
                 navigate('/')
             }, 5000)
         }, 2000)
@@ -48,8 +48,24 @@ export default function CartPage() {
                 </div>
                 <div className="flex flex-col lg:flex-row gap-10 items-start pb-32">
                     <div className="lg:col-span-2 flex-1 space-y-6">
+                        <div className="flex items-center gap-4 px-2">
+                            <button
+                                onClick={() => toggleSelectAll(!isAllSelected)}
+                                className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all shrink-0 ${isAllSelected ? 'bg-primary border-primary' : 'border-secondary-200 bg-white hover:border-primary'}`}
+                            >
+                                {isAllSelected && <Check className="h-4 w-4 text-white" strokeWidth={3} />}
+                            </button>
+                            <span className="text-sm font-black text-secondary-500 uppercase tracking-[0.15em]">全选</span>
+                            <span className="text-xs text-secondary-300 font-bold ml-auto">已选 {selectedItems}/{totalItems} 件</span>
+                        </div>
                         {items.map((item, idx) => (
-                            <div key={`${item.id}-${idx}`} className="bg-white rounded-3xl p-6 shadow-xl border border-secondary-50 flex gap-8 animate-in fade-in slide-in-from-bottom-4 group relative overflow-hidden">
+                            <div key={`${item.id}-${idx}`} className={`bg-white rounded-3xl p-6 shadow-xl border flex gap-8 animate-in fade-in slide-in-from-bottom-4 group relative overflow-hidden transition-all ${item.selected ? 'border-primary/20' : 'border-secondary-50 opacity-60'}`}>
+                                <button
+                                    onClick={() => toggleSelect(item.id, item.selectedSpecs)}
+                                    className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all shrink-0 mt-14 ${item.selected ? 'bg-primary border-primary' : 'border-secondary-200 bg-white hover:border-primary'}`}
+                                >
+                                    {item.selected && <Check className="h-4 w-4 text-white" strokeWidth={3} />}
+                                </button>
                                 <Link to={`/product/${item.id}`} className="shrink-0 rounded-[1.5rem] overflow-hidden shadow-2xl border border-secondary-50"><img src={item.main_image} alt="" loading="lazy" decoding="async" className="w-36 h-36 object-cover group-hover:scale-110 transition-transform" /></Link>
                                 <div className="flex-1 flex flex-col justify-between py-1">
                                     <div className="flex justify-between items-start mb-4">
@@ -71,13 +87,23 @@ export default function CartPage() {
                     <aside className="w-full lg:w-[420px] shrink-0 lg:sticky lg:top-28">
                         <div className="bg-secondary-900 rounded-[2.5rem] p-12 text-white shadow-2xl relative overflow-hidden">
                             <h2 className="text-3xl font-black mb-12 tracking-tighter italic opacity-90">订单摘要</h2>
-                            <div className="space-y-6 mb-12 flex justify-between items-end">
-                                <span className="text-xs font-black text-secondary-300 uppercase tracking-[0.2em]">应付合计数</span>
-                                <div className="text-right"><div className="text-5xl font-black text-primary tracking-tighter italic">¥{totalPrice.toFixed(2)}</div></div>
+                            <div className="space-y-4 mb-8">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-xs font-black text-secondary-300 uppercase tracking-[0.15em]">全部商品</span>
+                                    <span className="text-sm font-bold text-secondary-400">¥{totalPrice.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-xs font-black text-secondary-300 uppercase tracking-[0.15em]">已选商品 ({selectedItems}件)</span>
+                                    <span className="text-sm font-bold text-primary">¥{selectedTotalPrice.toFixed(2)}</span>
+                                </div>
+                            </div>
+                            <div className="space-y-6 mb-12 flex justify-between items-end border-t border-secondary-700 pt-8">
+                                <span className="text-xs font-black text-secondary-300 uppercase tracking-[0.2em]">应付合计</span>
+                                <div className="text-right"><div className="text-5xl font-black text-primary tracking-tighter italic">¥{selectedTotalPrice.toFixed(2)}</div></div>
                             </div>
                             <button
                                 onClick={handleCheckout}
-                                disabled={isProcessing || showSuccess}
+                                disabled={isProcessing || showSuccess || selectedItems === 0}
                                 className="w-full bg-white text-secondary-900 py-6 rounded-2xl font-black text-sm hover:bg-primary hover:text-white transition-all shadow-2xl active:scale-95 flex items-center justify-center gap-4 uppercase tracking-[0.3em] group disabled:opacity-50"
                             >
                                 {isProcessing ? (
@@ -85,7 +111,7 @@ export default function CartPage() {
                                 ) : showSuccess ? (
                                     <div className="flex items-center gap-3 text-green-500"><Check className="h-5 w-5" /> 订单已提交</div>
                                 ) : (
-                                    <><Zap className="h-5 w-5 fill-primary text-primary group-hover:fill-white group-hover:text-white" /> 立即支付 ({totalItems})</>
+                                    <><Zap className="h-5 w-5 fill-primary text-primary group-hover:fill-white group-hover:text-white" /> 立即支付 ({selectedItems})</>
                                 )}
                             </button>
                             <p className="text-[10px] text-secondary-500 font-bold uppercase tracking-widest text-center mt-8 opacity-50">Secure Checkout Powered by ShieldPay</p>
@@ -102,7 +128,7 @@ export default function CartPage() {
                             <h2 className="text-4xl font-black text-secondary-900 mb-4 tracking-tighter italic uppercase">支付成功！</h2>
                             <p className="text-secondary-400 font-bold mb-10 leading-relaxed">您的订单已在快马加鞭处理中，<br />我们将尽快为您安排发货。</p>
                             <div className="p-6 bg-secondary-50 rounded-2xl flex items-center justify-between mb-10 border border-secondary-100">
-                                <div className="text-left"><p className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">实付金额</p><p className="text-2xl font-black text-primary italic tracking-tighter">¥{totalPrice.toFixed(2)}</p></div>
+                                <div className="text-left"><p className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">实付金额</p><p className="text-2xl font-black text-primary italic tracking-tighter">¥{selectedTotalPrice.toFixed(2)}</p></div>
                                 <ShieldCheck className="h-8 w-8 text-secondary-200" />
                             </div>
                             <button onClick={() => navigate('/')} className="w-full py-5 bg-secondary-900 text-white rounded-2xl font-black text-sm hover:bg-primary transition-all active:scale-95 uppercase tracking-[0.2em]">返回首页</button>

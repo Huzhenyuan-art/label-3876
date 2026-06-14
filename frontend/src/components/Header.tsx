@@ -17,6 +17,10 @@ export const Header = React.memo(({ showSearch = true }: { showSearch?: boolean 
     const menuRef = React.useRef<HTMLDivElement>(null)
 
     React.useEffect(() => {
+        setQuery(searchParams.get('q') || '')
+    }, [searchParams])
+
+    React.useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
                 setShowUserMenu(false)
@@ -28,7 +32,13 @@ export const Header = React.memo(({ showSearch = true }: { showSearch?: boolean 
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault()
-        navigate(`/search?q=${encodeURIComponent(query)}`)
+        const category = searchParams.get('category')
+        const params = new URLSearchParams()
+        params.set('q', query)
+        if (category) {
+            params.set('category', category)
+        }
+        navigate(`/search?${params.toString()}`)
     }
 
     return (

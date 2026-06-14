@@ -22,11 +22,12 @@ export default function HomePage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [categoriesLoading, setCategoriesLoading] = useState(true)
-  const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null)
   const recommendRef = React.useRef<HTMLElement>(null)
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const q = (searchParams.get('q') || '').toLowerCase()
+  const categoryParam = searchParams.get('category')
+  const activeCategoryId = categoryParam ? parseInt(categoryParam, 10) : null
   const { toggleFavorite, isFavorite } = useFavorites()
 
   useEffect(() => {
@@ -86,11 +87,19 @@ export default function HomePage() {
     : '全部'
 
   const handleCategoryClick = (categoryId: number) => {
+    const newParams = new URLSearchParams(searchParams)
     if (activeCategoryId === categoryId) {
-      setActiveCategoryId(null)
+      newParams.delete('category')
     } else {
-      setActiveCategoryId(categoryId)
+      newParams.set('category', String(categoryId))
     }
+    setSearchParams(newParams)
+  }
+
+  const clearCategory = () => {
+    const newParams = new URLSearchParams(searchParams)
+    newParams.delete('category')
+    setSearchParams(newParams)
   }
 
   const scrollToRecommend = () => {
@@ -171,7 +180,7 @@ export default function HomePage() {
                 <div className="flex items-center gap-3"><span className="h-1.5 w-12 bg-primary rounded-full" /><span className="text-sm font-bold text-secondary-400 dark:text-secondary-500 uppercase tracking-widest">Recommended for You</span></div>
               </div>
               {activeCategoryId !== null && (
-                <button onClick={() => setActiveCategoryId(null)} className="text-xs font-black text-secondary-400 dark:text-secondary-500 hover:text-primary transition-colors flex items-center gap-2 border-b-2 border-transparent hover:border-primary pb-1">清除重置 <X className="h-3 w-3" /></button>
+                <button onClick={clearCategory} className="text-xs font-black text-secondary-400 dark:text-secondary-500 hover:text-primary transition-colors flex items-center gap-2 border-b-2 border-transparent hover:border-primary pb-1">清除重置 <X className="h-3 w-3" /></button>
               )}
             </div>
 
@@ -215,7 +224,7 @@ export default function HomePage() {
                 </div>
                 <h3 className="text-xl font-black text-secondary-900 dark:text-white mb-2">未找到相关商品</h3>
                 <p className="text-secondary-400 dark:text-secondary-500 text-sm font-bold">换个关键词试试，或者清除过滤条件</p>
-                <button onClick={() => { setActiveCategoryId(null); navigate('/'); }} className="mt-8 px-8 py-3 bg-primary text-white rounded-xl font-black text-xs hover:bg-primary-600 transition-all shadow-lg shadow-primary/20">查看全部商品</button>
+                <button onClick={clearCategory} className="mt-8 px-8 py-3 bg-primary text-white rounded-xl font-black text-xs hover:bg-primary-600 transition-all shadow-lg shadow-primary/20">查看全部商品</button>
               </div>
             )}
           </section>

@@ -1,11 +1,25 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ShoppingBag, Trash2, Minus, Plus, Zap, Check, ShieldCheck, Circle, X, RefreshCw, GitMerge } from 'lucide-react'
+import { ArrowLeft, ShoppingBag, Trash2, Minus, Plus, Zap, Check, ShieldCheck, Circle, X, RefreshCw, GitMerge, Tag } from 'lucide-react'
 import { Header } from '../components/Header'
 import { useCart } from '../contexts/CartContext'
 import { useAuth } from '../contexts/AuthContext'
 import { orderApi } from '../api'
-import { OrderItemCreate } from '../types'
+import { CartItem, OrderItemCreate } from '../types'
+
+const getItemKey = (productId: number, specs?: Record<string, string>, skuId?: number): string => {
+    if (skuId) return `${productId}-sku-${skuId}`
+    return `${productId}-${JSON.stringify(specs || {})}`
+}
+
+const formatSpecsLabel = (specs: Record<string, string>): JSX.Element[] => {
+    return Object.entries(specs).map(([key, val]) => (
+        <span key={`${key}-${val}`} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[11px] font-bold bg-primary/5 text-primary border-primary/20">
+            <Tag className="h-3 w-3" />
+            {key}：{val}
+        </span>
+    ))
+}
 
 export default function CartPage() {
     const navigate = useNavigate()
@@ -134,45 +148,46 @@ export default function CartPage() {
                             <span className="text-sm font-black text-secondary-500 uppercase tracking-[0.15em]">全选</span>
                             <span className="text-xs text-secondary-300 font-bold ml-auto">已选 {selectedItems}/{totalItems} 件</span>
                         </div>
-                        {items.map((item, idx) => (
-                            <div key={`${item.id}-${idx}`} className={`bg-white rounded-3xl p-6 shadow-xl border flex gap-8 animate-in fade-in slide-in-from-bottom-4 group relative overflow-hidden transition-all ${item.selected ? 'border-primary/20' : 'border-secondary-50 opacity-60'}`}>
-                                <button
-                                    onClick={() => toggleSelect(item.id, item.selectedSpecs)}
-                                    className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all shrink-0 mt-14 ${item.selected ? 'bg-primary border-primary' : 'border-secondary-200 bg-white hover:border-primary'}`}
-                                >
-                                    {item.selected && <Check className="h-4 w-4 text-white" strokeWidth={3} />}
-                                </button>
-                                <Link to={`/product/${item.id}`} className="shrink-0 rounded-[1.5rem] overflow-hidden shadow-2xl border border-secondary-50"><img src={item.main_image} alt="" loading="lazy" decoding="async" className="w-36 h-36 object-cover group-hover:scale-110 transition-transform" /></Link>
-                                <div className="flex-1 flex flex-col justify-between py-1">
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div>
-                                            <Link to={`/product/${item.id}`} className="font-black text-secondary-900 text-xl hover:text-primary transition-colors tracking-tighter italic">{item.name}</Link>
-                                            {item.selectedSpecs && Object.keys(item.selectedSpecs).length > 0 && (
-                                                <div className="flex flex-wrap gap-2 mt-2">
-                                                    {Object.entries(item.selectedSpecs).map(([key, val]) => (
-                                                        <span key={key} className="text-[10px] font-bold text-secondary-400 bg-secondary-50 px-2.5 py-1 rounded-lg border border-secondary-100">{key}: {val}</span>
-                                                    ))}
-                                                </div>
-                                            )}
+                        {items.map((item) => {
+                            const itemKey = getItemKey(item.id, item.selectedSpecs, item.skuId)
+                            return (
+                                <div key={itemKey} className={`bg-white rounded-3xl p-6 shadow-xl border flex gap-8 animate-in fade-in slide-in-from-bottom-4 group relative overflow-hidden transition-all ${item.selected ? 'border-primary/20' : 'border-secondary-50 opacity-60'}`}>
+                                    <button
+                                        onClick={() => toggleSelect(item.id, item.selectedSpecs, item.skuId)}
+                                        className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all shrink-0 mt-14 ${item.selected ? 'bg-primary border-primary' : 'border-secondary-200 bg-white hover:border-primary'}`}
+                                    >
+                                        {item.selected && <Check className="h-4 w-4 text-white" strokeWidth={3} />}
+                                    </button>
+                                    <Link to={`/product/${item.id}`} className="shrink-0 rounded-[1.5rem] overflow-hidden shadow-2xl border border-secondary-50"><img src={item.main_image} alt="" loading="lazy" decoding="async" className="w-36 h-36 object-cover group-hover:scale-110 transition-transform" /></Link>
+                                    <div className="flex-1 flex flex-col justify-between py-1">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div>
+                                                <Link to={`/product/${item.id}`} className="font-black text-secondary-900 text-xl hover:text-primary transition-colors tracking-tighter italic">{item.name}</Link>
+                                                {item.selectedSpecs && Object.keys(item.selectedSpecs).length > 0 && (
+                                                    <div className="flex flex-wrap gap-2 mt-3">
+                                                        {formatSpecsLabel(item.selectedSpecs)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <button onClick={async () => { try { await removeFromCart(item.id, item.selectedSpecs, item.skuId) } catch (error) { console.error('Failed to remove item:', error) } }} className="p-2 text-secondary-200 hover:text-primary active:scale-75"><Trash2 className="h-5 w-5" /></button>
                                         </div>
-                                        <button onClick={async () => { try { await removeFromCart(item.id, item.selectedSpecs) } catch (error) { console.error('Failed to remove item:', error) } }} className="p-2 text-secondary-200 hover:text-primary active:scale-75"><Trash2 className="h-5 w-5" /></button>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-baseline gap-2">
-                                            <span className="text-2xl font-black text-primary tracking-tighter italic">¥{item.price.toFixed(2)}</span>
-                                            {item.original_price && item.original_price > item.price && (
-                                                <span className="text-sm font-bold text-secondary-300 line-through">¥{item.original_price.toFixed(2)}</span>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-5 bg-secondary-50/80 p-1.5 rounded-[1.25rem] border border-secondary-100 shadow-inner">
-                                            <button onClick={async () => { try { await updateQuantity(item.id, item.quantity - 1, item.selectedSpecs) } catch (error) { console.error('Failed to update quantity:', error) } }} disabled={item.quantity <= 1} className="w-10 h-10 bg-white rounded-xl shadow-sm hover:text-primary active:scale-75 disabled:opacity-20"><Minus className="h-4 w-4" /></button>
-                                            <span className="w-8 text-center font-black text-secondary-900 tabular-nums">{item.quantity}</span>
-                                            <button onClick={async () => { try { await updateQuantity(item.id, item.quantity + 1, item.selectedSpecs) } catch (error) { console.error('Failed to update quantity:', error) } }} className="w-10 h-10 bg-white rounded-xl shadow-sm hover:text-primary active:scale-75"><Plus className="h-4 w-4" /></button>
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-baseline gap-2">
+                                                <span className="text-2xl font-black text-primary tracking-tighter italic">¥{item.price.toFixed(2)}</span>
+                                                {item.original_price && item.original_price > item.price && (
+                                                    <span className="text-sm font-bold text-secondary-300 line-through">¥{item.original_price.toFixed(2)}</span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-5 bg-secondary-50/80 p-1.5 rounded-[1.25rem] border border-secondary-100 shadow-inner">
+                                                <button onClick={async () => { try { await updateQuantity(item.id, item.quantity - 1, item.selectedSpecs, item.skuId) } catch (error) { console.error('Failed to update quantity:', error) } }} disabled={item.quantity <= 1} className="w-10 h-10 bg-white rounded-xl shadow-sm hover:text-primary active:scale-75 disabled:opacity-20"><Minus className="h-4 w-4" /></button>
+                                                <span className="w-8 text-center font-black text-secondary-900 tabular-nums">{item.quantity}</span>
+                                                <button onClick={async () => { try { await updateQuantity(item.id, item.quantity + 1, item.selectedSpecs, item.skuId) } catch (error) { console.error('Failed to update quantity:', error) } }} className="w-10 h-10 bg-white rounded-xl shadow-sm hover:text-primary active:scale-75"><Plus className="h-4 w-4" /></button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            )
+                        })}
                     </div>
                     <aside className="w-full lg:w-[420px] shrink-0 lg:sticky lg:top-28">
                         <div className="bg-secondary-900 rounded-[2.5rem] p-12 text-white shadow-2xl relative overflow-hidden">

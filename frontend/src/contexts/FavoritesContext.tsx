@@ -5,6 +5,8 @@ interface FavoritesContextType {
     favorites: Product[]
     toggleFavorite: (product: Product) => void
     isFavorite: (id: number) => boolean
+    removeFavorite: (id: number) => void
+    removeFavorites: (ids: number[]) => void
 }
 
 const FavoritesContext = createContext<FavoritesContextType | undefined>(undefined)
@@ -42,8 +44,16 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
 
     const isFavorite = (id: number) => favorites.some((p) => p.id === id)
 
+    const removeFavorite = (id: number) => {
+        setFavorites((prev) => prev.filter((p) => p.id !== id))
+    }
+
+    const removeFavorites = (ids: number[]) => {
+        setFavorites((prev) => prev.filter((p) => !ids.includes(p.id)))
+    }
+
     return (
-        <FavoritesContext.Provider value={{ favorites, toggleFavorite, isFavorite }}>
+        <FavoritesContext.Provider value={{ favorites, toggleFavorite, isFavorite, removeFavorite, removeFavorites }}>
             {children}
         </FavoritesContext.Provider>
     )

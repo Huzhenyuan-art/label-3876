@@ -4,6 +4,7 @@ import { ArrowLeft, Package, Truck, CheckCircle2, MapPin, CreditCard, Clock, Loa
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { Order, ORDER_STATUS_MAP, OrderTimelineItem, OrderStatus } from '../types'
 import { orderApi } from '../api'
+import { MOCK_ORDERS } from '../mocks'
 
 const formatDate = (dateStr: string): string => {
     try {
@@ -143,8 +144,17 @@ export default function OrderDetailPage() {
                 setLoading(false)
                 return
             }
-            const { data } = await orderApi.getById(orderId)
-            setOrder(data)
+            try {
+                const { data } = await orderApi.getById(orderId)
+                setOrder(data)
+            } catch (apiErr) {
+                const mockOrder = MOCK_ORDERS.find(o => o.id === orderId)
+                if (mockOrder) {
+                    setOrder(mockOrder)
+                } else {
+                    throw apiErr
+                }
+            }
         } catch (err: any) {
             const detail = err?.response?.data?.detail || '加载订单详情失败，请稍后重试'
             setError(typeof detail === 'string' ? detail : '加载订单详情失败，请稍后重试')

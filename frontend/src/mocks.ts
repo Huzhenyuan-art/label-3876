@@ -1,4 +1,4 @@
-import { Product, Sku } from './types'
+import { Product, Sku, Order, OrderStatus } from './types'
 
 const generateProductSpecs = (specs: { name: string; values: string[] }[]) => {
     return specs.map(spec => ({
@@ -143,4 +143,117 @@ export const MOCK_PRODUCTS: Product[] = [
         skus: product6Skus,
         shop_id: 1, category_id: null, created_at: '2024-01-06'
     }
+]
+
+const createOrderItem = (
+    id: number,
+    orderId: number,
+    productId: number,
+    productName: string,
+    productImage: string,
+    price: number,
+    quantity: number,
+    specs: Record<string, string> | null = null,
+    createdAt: string
+) => ({
+    id,
+    order_id: orderId,
+    product_id: productId,
+    product_name: productName,
+    product_image: productImage,
+    price,
+    quantity,
+    specs,
+    created_at: createdAt,
+})
+
+const createOrder = (
+    id: number,
+    orderNo: string,
+    status: OrderStatus,
+    items: ReturnType<typeof createOrderItem>[],
+    createdAt: string,
+    updatedAt: string
+): Order => {
+    const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    return {
+        id,
+        order_no: orderNo,
+        user_id: 1,
+        status,
+        total_amount: totalAmount,
+        shipping_address: '北京市朝阳区建国路88号SOHO现代城A座1201室',
+        contact_name: '张三',
+        contact_phone: '13800138000',
+        payment_method: '微信支付',
+        shipping_method: '顺丰速运',
+        created_at: createdAt,
+        updated_at: updatedAt,
+        items,
+    }
+}
+
+export const MOCK_ORDERS: Order[] = [
+    createOrder(
+        101,
+        'ORD202406100001',
+        'pending',
+        [
+            createOrderItem(1001, 101, 1, '降噪无线蓝牙耳机 Pro', 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=600', 1299, 1, { '颜色': '月岩灰', '配置': 'Pro版' }, '2024-06-10T10:30:00Z'),
+        ],
+        '2024-06-10T10:30:00Z',
+        '2024-06-10T10:30:00Z'
+    ),
+    createOrder(
+        102,
+        'ORD202406090002',
+        'paid',
+        [
+            createOrderItem(1002, 102, 2, '智能运动手表 S3', 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600', 1099, 1, { '表带': '真皮', '尺寸': '45mm' }, '2024-06-09T14:20:00Z'),
+            createOrderItem(1003, 102, 3, '机械键盘 C1', 'https://images.unsplash.com/photo-1511467687858-23d96c32e4ae?auto=format&fit=crop&q=80&w=600', 549, 1, { '轴体': '红轴' }, '2024-06-09T14:20:00Z'),
+        ],
+        '2024-06-09T14:20:00Z',
+        '2024-06-09T14:35:00Z'
+    ),
+    createOrder(
+        103,
+        'ORD202406080003',
+        'shipped',
+        [
+            createOrderItem(1004, 103, 4, '潮流印花卫衣', 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?auto=format&fit=crop&q=80&w=600', 299, 2, { '尺码': 'L', '颜色': '活力橘' }, '2024-06-08T09:15:00Z'),
+        ],
+        '2024-06-08T09:15:00Z',
+        '2024-06-08T18:00:00Z'
+    ),
+    createOrder(
+        104,
+        'ORD202406050004',
+        'delivered',
+        [
+            createOrderItem(1005, 104, 5, '精华修复面霜', 'https://images.unsplash.com/photo-1542459742-1e7658c42a66?auto=format&fit=crop&q=80&w=600', 988, 1, { '规格': '100ml' }, '2024-06-05T16:45:00Z'),
+        ],
+        '2024-06-05T16:45:00Z',
+        '2024-06-07T10:00:00Z'
+    ),
+    createOrder(
+        105,
+        'ORD202406010005',
+        'completed',
+        [
+            createOrderItem(1006, 105, 6, '高性能登山鞋', 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=600', 799, 1, { '尺码': '42' }, '2024-06-01T11:00:00Z'),
+            createOrderItem(1007, 105, 1, '降噪无线蓝牙耳机 Pro', 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=600', 1299, 1, { '颜色': '暗夜黑', '配置': '标准版' }, '2024-06-01T11:00:00Z'),
+        ],
+        '2024-06-01T11:00:00Z',
+        '2024-06-04T15:30:00Z'
+    ),
+    createOrder(
+        106,
+        'ORD202406070006',
+        'cancelled',
+        [
+            createOrderItem(1008, 106, 3, '机械键盘 C1', 'https://images.unsplash.com/photo-1511467687858-23d96c32e4ae?auto=format&fit=crop&q=80&w=600', 499, 1, { '轴体': '青轴' }, '2024-06-07T20:10:00Z'),
+        ],
+        '2024-06-07T20:10:00Z',
+        '2024-06-07T21:00:00Z'
+    ),
 ]

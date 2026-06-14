@@ -1,5 +1,5 @@
-import React from 'react'
-import { ShoppingCart, GitMerge, Replace, Server, X } from 'lucide-react'
+import React, { useState } from 'react'
+import { ShoppingCart, GitMerge, Replace, Server, X, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useCart } from '../contexts/CartContext'
 import { MergeStrategy } from '../types'
 
@@ -11,12 +11,18 @@ interface MergeOption {
     highlight?: boolean
 }
 
+type MergeStatus = 'idle' | 'loading' | 'success' | 'error'
+
 export const CartMergeDialog: React.FC = () => {
-    const { showMergeDialog, dismissMergeDialog, mergeLocalCart, localItemCount, serverItemCount, isLoading } = useCart()
+    const { showMergeDialog, dismissMergeDialog, mergeLocalCart, localItemCount, serverItemCount } = useCart()
+    const [mergeStatus, setMergeStatus] = useState<MergeStatus>('idle')
+    const [errorMessage, setErrorMessage] = useState('')
+    const [activeStrategy, setActiveStrategy] = useState<MergeStrategy | null>(null)
 
     if (!showMergeDialog) return null
 
     const effectiveLocalCount = localItemCount > 0 ? localItemCount : 0
+    const isLoading = mergeStatus === 'loading'
 
     const options: MergeOption[] = [
         {
@@ -41,10 +47,30 @@ export const CartMergeDialog: React.FC = () => {
     ]
 
     const handleSelect = async (strategy: MergeStrategy) => {
+        if (isLoading) return
+
+        setActiveStrategy(strategy)
+        setMergeStatus('loading')
+        setErrorMessage('')
+
         try {
+            console.log('[CartMergeDialog] Starting merge with strategy:', strategy)
             await mergeLocalCart(strategy)
-        } catch (error) {
-            console.error('Merge failed:', error)
+            console.log('[CartMergeDialog] Merge succeeded')
+            setMergeStatus('success')
+            setTimeout(() => {
+                setMergeStatus('idle')
+                setActiveStrategy(null)
+            }, 800)
+        } catch (error: any) {
+            console.error('[CartMergeDialog] Merge failed:', error)
+            setMergeStatus('error')
+            setErrorMessage(error?.message || '同步失败，请稍后重试')
+            setTimeout(() => {
+                setMergeStatus('idle')
+                setActiveStrategy(null)
+                setErrorMessage('')
+            }, 3000)
         }
     }
 
@@ -63,11 +89,26 @@ export const CartMergeDialog: React.FC = () => {
                     </div>
                     <button
                         onClick={dismissMergeDialog}
-                        className="p-2 hover:bg-secondary-50 rounded-xl transition-colors text-secondary-400 hover:text-secondary-700"
+                        disabled={isLoading}
+                        className="p-2 hover:bg-secondary-50 rounded-xl transition-colors text-secondary-400 hover:text-secondary-700 disabled:opacity-50"
                     >
                         <X className="h-5 w-5" />
                     </button>
                 </div>
+
+                {errorMessage && (
+                    <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                        <AlertCircle className="h-5 w-5 text-red-500 shrink-0" />
+                        <p className="text-sm font-bold text-red-600">{errorMessage}</p>
+                    </div>
+                )}
+
+                {mergeStatus === 'success' && (
+                    <div className="mb-6 p-4 bg-green-50 border border-green-100 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                        <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+                        <p className="text-sm font-bold text-green-600">购物车同步成功！</p>
+                    </div>
+                )}
 
                 <p className="text-sm text-secondary-500 font-bold mb-8 leading-relaxed">
                     您在未登录时添加了 {effectiveLocalCount} 件商品到购物车。
@@ -75,38 +116,56 @@ export const CartMergeDialog: React.FC = () => {
                 </p>
 
                 <div className="space-y-4 mb-8">
-                    {options.map((option) => (
-                        <button
-                            key={option.strategy}
-                            onClick={() => handleSelect(option.strategy)}
-                            disabled={isLoading}
-                            className={`w-full p-6 rounded-2xl text-left transition-all group disabled:opacity-50 ${
-                                option.highlight
-                                    ? 'bg-primary/5 border-2 border-primary/30 hover:bg-primary/10 hover:border-primary'
-                                    : 'bg-secondary-50 border-2 border-transparent hover:bg-secondary-100 hover:border-secondary-200'
-                            }`}
-                        >
-                            <div className="flex items-start gap-4">
-                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
-                                    option.highlight
-                                        ? 'bg-primary text-white'
-                                        : 'bg-white text-secondary-400 group-hover:text-primary'
-                                }`}>
-                                    {option.icon}
-                                </div>
-                                <div className="flex-1">
-                                    <h3 className={`font-black text-lg mb-1 ${
-                                        option.highlight ? 'text-primary' : 'text-secondary-900'
+                    {options.map((option) => {
+                        const isActive = activeStrategy === option.strategy
+                        const showLoading = isLoading && isActive
+                        return (
+                            <button
+                                key={option.strategy}
+                                onClick={() => handleSelect(option.strategy)}
+                                disabled={isLoading}
+                                className={`w-full p-6 rounded-2xl text-left transition-all group disabled:opacity-60 relative overflow-hidden ${
+                                    isActive && mergeStatus === 'success'
+                                        ? 'bg-green-50 border-2 border-green-300'
+                                        : option.highlight
+                                        ? 'bg-primary/5 border-2 border-primary/30 hover:bg-primary/10 hover:border-primary'
+                                        : 'bg-secondary-50 border-2 border-transparent hover:bg-secondary-100 hover:border-secondary-200'
+                                }`}
+                            >
+                                <div className="flex items-start gap-4">
+                                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                                        isActive && mergeStatus === 'success'
+                                            ? 'bg-green-500 text-white'
+                                            : option.highlight
+                                            ? 'bg-primary text-white'
+                                            : 'bg-white text-secondary-400 group-hover:text-primary'
                                     }`}>
-                                        {option.title}
-                                    </h3>
-                                    <p className="text-sm text-secondary-500 font-bold leading-relaxed">
-                                        {option.description}
-                                    </p>
+                                        {showLoading ? (
+                                            <Loader2 className="h-6 w-6 animate-spin" />
+                                        ) : isActive && mergeStatus === 'success' ? (
+                                            <CheckCircle2 className="h-6 w-6" />
+                                        ) : (
+                                            option.icon
+                                        )}
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className={`font-black text-lg mb-1 ${
+                                            isActive && mergeStatus === 'success'
+                                                ? 'text-green-600'
+                                                : option.highlight
+                                                ? 'text-primary'
+                                                : 'text-secondary-900'
+                                        }`}>
+                                            {option.title}
+                                        </h3>
+                                        <p className="text-sm text-secondary-500 font-bold leading-relaxed">
+                                            {option.description}
+                                        </p>
+                                    </div>
                                 </div>
-                            </div>
-                        </button>
-                    ))}
+                            </button>
+                        )
+                    })}
                 </div>
 
                 <button

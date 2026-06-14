@@ -118,6 +118,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   })
   const isInitializing = useRef(true)
   const pendingLocalCart = useRef<CartItem[]>([])
+  const skipLocalStorageSync = useRef(false)
 
   const activeItems: CartItem[] = isAuthenticated ? serverItems : localItems
 
@@ -127,6 +128,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   })
 
   useEffect(() => {
+    if (skipLocalStorageSync.current) {
+      skipLocalStorageSync.current = false
+      return
+    }
     saveLocalCart(localItems)
     if (isAuthenticated) {
       const hasPending = localItems.length > 0
@@ -162,11 +167,25 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (isAuthenticated && isInitializing.current) {
       isInitializing.current = false
       const localCart = loadLocalCart()
-      if (localCart.length > 0) {
+      const hasPendingFlag = hasPendingMergeFlag()
+      const shouldShowMerge = (hasPendingFlag || localCart.length > 0) && localCart.length > 0
+
+      console.log('[CartInit] Check:', {
+        localCartLength: localCart.length,
+        hasPendingFlag,
+        shouldShowMerge,
+      })
+
+      if (shouldShowMerge) {
         pendingLocalCart.current = localCart
         setHasPendingMerge(true)
         setPendingMergeFlag(true)
         setShowMergeDialog(true)
+      } else {
+        if (localCart.length === 0 && hasPendingFlag) {
+          setPendingMergeFlag(false)
+          setHasPendingMerge(false)
+        }
       }
       fetchServerCart()
     } else if (!isAuthenticated && !isInitializing.current) {
@@ -184,6 +203,16 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     })
   }
 
+  const clearLocalCartSync = useCallback(() => {
+    saveLocalCart([])
+    setPendingMergeFlag(false)
+    pendingLocalCart.current = []
+    skipLocalStorageSync.current = true
+    setLocalItems([])
+    setHasPendingMerge(false)
+    console.log('[CartSync] Local cart cleared synchronously')
+  }, [])
+
   const mergeLocalCart = useCallback(async (strategy: MergeStrategy) => {
     if (!isAuthenticated) return
     setIsLoading(true)
@@ -192,26 +221,25 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (itemsToMerge.length === 0) {
         setShowMergeDialog(false)
-        setHasPendingMerge(false)
-        setPendingMergeFlag(false)
-        pendingLocalCart.current = []
+        clearLocalCartSync()
         return
       }
 
       if (strategy === 'keep_server') {
-        setLocalItems([])
+        clearLocalCartSync()
         setShowMergeDialog(false)
-        setHasPendingMerge(false)
-        setPendingMergeFlag(false)
-        pendingLocalCart.current = []
         return
       }
 
       const mergeItems = itemsToMerge.map(cartItemToMergeItem)
+      console.log('[CartMerge] Sending merge request:', { strategy, items: mergeItems })
+
       const { data } = await cartApi.merge({
         items: mergeItems,
         merge_strategy: strategy,
       })
+
+      console.log('[CartMerge] Merge response:', data)
 
       const newSelectedState = { ...selectedState }
       const newServerItems = data.items.map(serverItem => {
@@ -227,18 +255,15 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setSelectedState(newSelectedState)
       setServerItems(newServerItems)
-      setLocalItems([])
+      clearLocalCartSync()
       setShowMergeDialog(false)
-      setHasPendingMerge(false)
-      setPendingMergeFlag(false)
-      pendingLocalCart.current = []
     } catch (error) {
-      console.error('Failed to merge cart:', error)
+      console.error('[CartMerge] Failed to merge cart:', error)
       throw error
     } finally {
       setIsLoading(false)
     }
-  }, [isAuthenticated, selectedState])
+  }, [isAuthenticated, selectedState, clearLocalCartSync])
 
   const openMergeDialog = useCallback(() => {
     if (!isAuthenticated) return

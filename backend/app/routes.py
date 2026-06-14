@@ -459,6 +459,108 @@ async def pay_order(
         )
 
 
+@router.put("/orders/{order_id}/ship", response_model=OrderResponse)
+async def ship_order(
+    order_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    if order.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权操作该订单"
+        )
+    if order.status != "paid":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前订单状态不允许发货"
+        )
+    order.status = "shipped"
+    order.updated_at = datetime.utcnow()
+    try:
+        await db.commit()
+        await db.refresh(order)
+        return order
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="发货失败，请稍后重试"
+        )
+
+
+@router.put("/orders/{order_id}/receive", response_model=OrderResponse)
+async def receive_order(
+    order_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    if order.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权操作该订单"
+        )
+    if order.status != "shipped":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前订单状态不允许确认收货"
+        )
+    order.status = "delivered"
+    order.updated_at = datetime.utcnow()
+    try:
+        await db.commit()
+        await db.refresh(order)
+        return order
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="确认收货失败，请稍后重试"
+        )
+
+
+@router.put("/orders/{order_id}/complete", response_model=OrderResponse)
+async def complete_order(
+    order_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    if order.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权操作该订单"
+        )
+    if order.status not in ("delivered", "shipped"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前订单状态不允许完成"
+        )
+    order.status = "completed"
+    order.updated_at = datetime.utcnow()
+    try:
+        await db.commit()
+        await db.refresh(order)
+        return order
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="完成订单失败，请稍后重试"
+        )
+
+
 async def refresh_cart(db: AsyncSession, user_id: int) -> Cart:
     result = await db.execute(select(Cart).where(Cart.user_id == user_id))
     cart = result.scalar_one_or_none()

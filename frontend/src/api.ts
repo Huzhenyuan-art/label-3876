@@ -121,6 +121,15 @@ export const orderApi = {
 
     pay: (orderId: number) =>
         api.put<Order>(`/orders/${orderId}/pay`),
+
+    ship: (orderId: number) =>
+        api.put<Order>(`/orders/${orderId}/ship`),
+
+    receive: (orderId: number) =>
+        api.put<Order>(`/orders/${orderId}/receive`),
+
+    complete: (orderId: number) =>
+        api.put<Order>(`/orders/${orderId}/complete`),
 }
 
 export const cartApi = {

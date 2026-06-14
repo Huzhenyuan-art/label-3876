@@ -85,3 +85,46 @@ class ChatMessage(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=datetime.datetime.utcnow
     )
+
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    order_no: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    total_amount: Mapped[float] = mapped_column(Float, nullable=False)
+    shipping_address: Mapped[str] = mapped_column(Text, default="")
+    contact_name: Mapped[str] = mapped_column(String(100), default="")
+    contact_phone: Mapped[str] = mapped_column(String(20), default="")
+    payment_method: Mapped[str] = mapped_column(String(50), default="")
+    shipping_method: Mapped[str] = mapped_column(String(50), default="")
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, default=datetime.datetime.utcnow
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
+
+    items: Mapped[list["OrderItem"]] = relationship(back_populates="order", lazy="selectin")
+    user: Mapped["User"] = relationship(lazy="selectin")
+
+
+class OrderItem(Base):
+    __tablename__ = "order_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), nullable=False, index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), nullable=False)
+    product_name: Mapped[str] = mapped_column(String(300), nullable=False)
+    product_image: Mapped[str] = mapped_column(String(500), default="")
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    specs: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, default=datetime.datetime.utcnow
+    )
+
+    order: Mapped["Order"] = relationship(back_populates="items")
+    product: Mapped["Product"] = relationship(lazy="selectin")

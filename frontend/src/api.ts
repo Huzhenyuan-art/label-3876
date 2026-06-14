@@ -1,5 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
-import { Product, Shop, ChatMessage, Category, LoginCredentials, RegisterCredentials, AuthResponse, User } from './types'
+import { Product, Shop, ChatMessage, Category, LoginCredentials, RegisterCredentials, AuthResponse, User, Order, OrderCreate } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8876'
 const TOKEN_KEY = 'token'
@@ -104,4 +104,18 @@ export const chatApi = {
     getMessages: (shopId: number) => api.get<ChatMessage[]>(`/chat/${shopId}`),
     sendMessage: (shopId: number, content: string, sender: string = 'buyer', clientId?: string) =>
         api.post<ChatMessage>(`/chat/${shopId}`, { content, sender, client_id: clientId }),
+}
+
+export const orderApi = {
+    create: (data: OrderCreate) =>
+        api.post<Order>('/orders', data),
+
+    getMyOrders: () =>
+        api.get<Order[]>('/orders'),
+
+    getById: (orderId: number) =>
+        api.get<Order>(`/orders/${orderId}`),
+
+    cancel: (orderId: number) =>
+        api.put<Order>(`/orders/${orderId}/cancel`),
 }

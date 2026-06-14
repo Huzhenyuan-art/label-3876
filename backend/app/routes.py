@@ -1,15 +1,17 @@
-from datetime import timedelta
+import uuid
+from datetime import timedelta, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.database import get_db
-from app.models import Product, Shop, ChatMessage, Category, User
+from app.models import Product, Shop, ChatMessage, Category, User, Order, OrderItem
 from app.schemas import (
     ProductResponse, ShopResponse, ChatMessageResponse, ChatMessageCreate,
-    CategoryResponse, UserCreate, UserLogin, UserResponse, Token, UserUpdate
+    CategoryResponse, UserCreate, UserLogin, UserResponse, Token, UserUpdate,
+    OrderCreate, OrderResponse, OrderItemResponse
 )
 from app.auth import (
     verify_password, get_password_hash, create_access_token,
@@ -268,4 +270,136 @@ async def send_message(
                 return retry_msg
         raise HTTPException(
             status_code=500, detail="Failed to save message due to database conflict"
+        )
+
+
+def generate_order_no() -> str:
+    now = datetime.now()
+    timestamp = now.strftime("%Y%m%d%H%M%S")
+    random_str = uuid.uuid4().hex[:8].upper()
+    return f"ORD-{timestamp}-{random_str}"
+
+
+@router.post("/orders", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
+async def create_order(
+    order_data: OrderCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if not order_data.items:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="订单商品不能为空"
+        )
+
+    total_amount = sum(item.price * item.quantity for item in order_data.items)
+
+    order_no = generate_order_no()
+    for _ in range(5):
+        existing = await db.execute(select(Order).where(Order.order_no == order_no))
+        if not existing.scalar_one_or_none():
+            break
+        order_no = generate_order_no()
+
+    new_order = Order(
+        order_no=order_no,
+        user_id=current_user.id,
+        status="pending",
+        total_amount=total_amount,
+        shipping_address=order_data.shipping_address,
+        contact_name=order_data.contact_name,
+        contact_phone=order_data.contact_phone,
+        payment_method=order_data.payment_method,
+        shipping_method=order_data.shipping_method,
+    )
+    db.add(new_order)
+    await db.flush()
+
+    for item_data in order_data.items:
+        order_item = OrderItem(
+            order_id=new_order.id,
+            product_id=item_data.product_id,
+            product_name=item_data.product_name,
+            product_image=item_data.product_image,
+            price=item_data.price,
+            quantity=item_data.quantity,
+            specs=item_data.specs,
+        )
+        db.add(order_item)
+
+    try:
+        await db.commit()
+        await db.refresh(new_order)
+        return new_order
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="创建订单失败，请稍后重试"
+        )
+
+
+@router.get("/orders", response_model=list[OrderResponse])
+async def get_my_orders(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Order)
+        .where(Order.user_id == current_user.id)
+        .order_by(desc(Order.created_at))
+    )
+    orders = result.scalars().all()
+    return orders
+
+
+@router.get("/orders/{order_id}", response_model=OrderResponse)
+async def get_order_detail(
+    order_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    if order.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权访问该订单"
+        )
+    return order
+
+
+@router.put("/orders/{order_id}/cancel", response_model=OrderResponse)
+async def cancel_order(
+    order_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    if order.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权操作该订单"
+        )
+    if order.status not in ("pending", "paid"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前订单状态不允许取消"
+        )
+    order.status = "cancelled"
+    order.updated_at = datetime.utcnow()
+    try:
+        await db.commit()
+        await db.refresh(order)
+        return order
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="取消订单失败"
         )

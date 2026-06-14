@@ -52,6 +52,7 @@ export interface User {
     email: string
     avatar: string
     nickname: string
+    created_at: string
 }
 
 export interface LoginCredentials {
@@ -76,4 +77,68 @@ export interface CartItem extends Product {
     quantity: number
     selectedSpecs?: Record<string, string>
     selected?: boolean
+}
+
+export interface OrderItem {
+    id: number
+    order_id: number
+    product_id: number
+    product_name: string
+    product_image: string
+    price: number
+    quantity: number
+    specs: Record<string, string> | null
+    created_at: string
+}
+
+export type OrderStatus = 'pending' | 'paid' | 'shipped' | 'delivered' | 'completed' | 'cancelled'
+
+export const ORDER_STATUS_MAP: Record<OrderStatus, string> = {
+    pending: '待支付',
+    paid: '待发货',
+    shipped: '待收货',
+    delivered: '已送达',
+    completed: '已完成',
+    cancelled: '已取消'
+}
+
+export interface Order {
+    id: number
+    order_no: string
+    user_id: number
+    status: OrderStatus
+    total_amount: number
+    shipping_address: string
+    contact_name: string
+    contact_phone: string
+    payment_method: string
+    shipping_method: string
+    created_at: string
+    updated_at: string
+    items: OrderItem[]
+}
+
+export interface OrderItemCreate {
+    product_id: number
+    product_name: string
+    product_image?: string
+    price: number
+    quantity: number
+    specs?: Record<string, string> | null
+}
+
+export interface OrderCreate {
+    items: OrderItemCreate[]
+    shipping_address?: string
+    contact_name?: string
+    contact_phone?: string
+    payment_method?: string
+    shipping_method?: string
+}
+
+export interface OrderTimelineItem {
+    status: string
+    time: string
+    desc: string
+    active: boolean
 }

@@ -117,3 +117,55 @@ class ChatMessageCreate(BaseModel):
     content: str
     sender: str = "buyer"
     client_id: str | None = None
+
+
+class OrderItemCreate(BaseModel):
+    product_id: int
+    product_name: str
+    product_image: str = ""
+    price: float
+    quantity: int
+    specs: dict | None = None
+
+
+class OrderItemResponse(BaseModel):
+    id: int
+    order_id: int
+    product_id: int
+    product_name: str
+    product_image: str
+    price: float
+    quantity: int
+    specs: dict | None = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class OrderCreate(BaseModel):
+    items: list[OrderItemCreate]
+    shipping_address: str = ""
+    contact_name: str = ""
+    contact_phone: str = ""
+    payment_method: str = ""
+    shipping_method: str = ""
+
+
+class OrderResponse(BaseModel):
+    id: int
+    order_no: str
+    user_id: int
+    status: str
+    total_amount: float
+    shipping_address: str
+    contact_name: str
+    contact_phone: str
+    payment_method: str
+    shipping_method: str
+    created_at: datetime
+    updated_at: datetime
+    items: list[OrderItemResponse] = []
+
+    class Config:
+        from_attributes = True

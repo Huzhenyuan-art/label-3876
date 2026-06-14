@@ -3,7 +3,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import engine, Base, async_session
-from app.models import Shop, Product, ChatMessage, Category, User
+from app.models import Shop, Product, ChatMessage, Category, User, Order, OrderItem
 from app.auth import get_password_hash
 
 logging.basicConfig(level=logging.INFO)

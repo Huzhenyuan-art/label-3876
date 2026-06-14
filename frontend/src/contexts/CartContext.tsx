@@ -14,7 +14,9 @@ interface CartContextType {
   removeSelected: () => Promise<void>
   mergeLocalCart: (strategy: MergeStrategy) => Promise<void>
   showMergeDialog: boolean
+  openMergeDialog: () => void
   dismissMergeDialog: () => void
+  hasPendingMerge: boolean
   localItemCount: number
   serverItemCount: number
   isLoading: boolean
@@ -90,6 +92,20 @@ const saveSelectedState = (state: Record<string, boolean>) => {
   localStorage.setItem(SELECTED_STATE_KEY, JSON.stringify(state))
 }
 
+const PENDING_MERGE_KEY = 'cart_pending_merge'
+
+const setPendingMergeFlag = (hasPending: boolean) => {
+  if (hasPending) {
+    localStorage.setItem(PENDING_MERGE_KEY, '1')
+  } else {
+    localStorage.removeItem(PENDING_MERGE_KEY)
+  }
+}
+
+const hasPendingMergeFlag = (): boolean => {
+  return localStorage.getItem(PENDING_MERGE_KEY) === '1'
+}
+
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isAuthenticated, loading: authLoading } = useAuth()
   const [localItems, setLocalItems] = useState<CartItem[]>(loadLocalCart)
@@ -97,6 +113,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [selectedState, setSelectedState] = useState<Record<string, boolean>>(loadSelectedState)
   const [showMergeDialog, setShowMergeDialog] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [hasPendingMerge, setHasPendingMerge] = useState<boolean>(() => {
+    return hasPendingMergeFlag() && loadLocalCart().length > 0
+  })
   const isInitializing = useRef(true)
   const pendingLocalCart = useRef<CartItem[]>([])
 
@@ -109,7 +128,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     saveLocalCart(localItems)
-  }, [localItems])
+    if (isAuthenticated) {
+      const hasPending = localItems.length > 0
+      setHasPendingMerge(hasPending)
+      setPendingMergeFlag(hasPending)
+    }
+  }, [localItems, isAuthenticated])
 
   useEffect(() => {
     saveSelectedState(selectedState)
@@ -140,6 +164,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const localCart = loadLocalCart()
       if (localCart.length > 0) {
         pendingLocalCart.current = localCart
+        setHasPendingMerge(true)
+        setPendingMergeFlag(true)
         setShowMergeDialog(true)
       }
       fetchServerCart()
@@ -164,8 +190,19 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const itemsToMerge = pendingLocalCart.current.length > 0 ? pendingLocalCart.current : loadLocalCart()
 
-      if (strategy === 'keep_server') {
+      if (itemsToMerge.length === 0) {
         setShowMergeDialog(false)
+        setHasPendingMerge(false)
+        setPendingMergeFlag(false)
+        pendingLocalCart.current = []
+        return
+      }
+
+      if (strategy === 'keep_server') {
+        setLocalItems([])
+        setShowMergeDialog(false)
+        setHasPendingMerge(false)
+        setPendingMergeFlag(false)
         pendingLocalCart.current = []
         return
       }
@@ -190,23 +227,29 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setSelectedState(newSelectedState)
       setServerItems(newServerItems)
-
-      if (strategy === 'replace') {
-        setLocalItems([])
-      }
-
+      setLocalItems([])
       setShowMergeDialog(false)
+      setHasPendingMerge(false)
+      setPendingMergeFlag(false)
       pendingLocalCart.current = []
     } catch (error) {
       console.error('Failed to merge cart:', error)
+      throw error
     } finally {
       setIsLoading(false)
     }
   }, [isAuthenticated, selectedState])
 
+  const openMergeDialog = useCallback(() => {
+    if (!isAuthenticated) return
+    const localCart = loadLocalCart()
+    if (localCart.length === 0) return
+    pendingLocalCart.current = localCart
+    setShowMergeDialog(true)
+  }, [isAuthenticated])
+
   const dismissMergeDialog = useCallback(() => {
     setShowMergeDialog(false)
-    pendingLocalCart.current = []
   }, [])
 
   const updateSelectedState = useCallback((key: string, selected: boolean) => {
@@ -434,7 +477,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         removeSelected,
         mergeLocalCart,
         showMergeDialog,
+        openMergeDialog,
         dismissMergeDialog,
+        hasPendingMerge,
         localItemCount,
         serverItemCount,
         isLoading,

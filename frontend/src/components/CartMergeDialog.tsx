@@ -16,19 +16,21 @@ export const CartMergeDialog: React.FC = () => {
 
     if (!showMergeDialog) return null
 
+    const effectiveLocalCount = localItemCount > 0 ? localItemCount : 0
+
     const options: MergeOption[] = [
         {
             strategy: 'merge',
             icon: <GitMerge className="h-6 w-6" />,
             title: '合并购物车',
-            description: `将本地 ${localItemCount} 件商品与服务端 ${serverItemCount} 件商品合并，相同商品数量累加`,
+            description: `将本地 ${effectiveLocalCount} 件商品与服务端 ${serverItemCount} 件商品合并，相同商品数量累加`,
             highlight: true,
         },
         {
             strategy: 'replace',
             icon: <Replace className="h-6 w-6" />,
             title: '替换服务端',
-            description: `用本地 ${localItemCount} 件商品替换服务端购物车`,
+            description: `用本地 ${effectiveLocalCount} 件商品替换服务端购物车`,
         },
         {
             strategy: 'keep_server',
@@ -39,7 +41,11 @@ export const CartMergeDialog: React.FC = () => {
     ]
 
     const handleSelect = async (strategy: MergeStrategy) => {
-        await mergeLocalCart(strategy)
+        try {
+            await mergeLocalCart(strategy)
+        } catch (error) {
+            console.error('Merge failed:', error)
+        }
     }
 
     return (
@@ -52,7 +58,7 @@ export const CartMergeDialog: React.FC = () => {
                         </div>
                         <div>
                             <h2 className="text-2xl font-black text-secondary-900 tracking-tighter italic">购物车同步</h2>
-                            <p className="text-sm text-secondary-400 font-bold">检测到本地有 {localItemCount} 件商品</p>
+                            <p className="text-sm text-secondary-400 font-bold">检测到本地有 {effectiveLocalCount} 件商品</p>
                         </div>
                     </div>
                     <button
@@ -64,7 +70,7 @@ export const CartMergeDialog: React.FC = () => {
                 </div>
 
                 <p className="text-sm text-secondary-500 font-bold mb-8 leading-relaxed">
-                    您在未登录时添加了 {localItemCount} 件商品到购物车。
+                    您在未登录时添加了 {effectiveLocalCount} 件商品到购物车。
                     请选择如何处理这些商品：
                 </p>
 

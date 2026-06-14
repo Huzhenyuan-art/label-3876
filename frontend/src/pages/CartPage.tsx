@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ShoppingBag, Trash2, Minus, Plus, Zap, Check, ShieldCheck, Circle, X } from 'lucide-react'
+import { ArrowLeft, ShoppingBag, Trash2, Minus, Plus, Zap, Check, ShieldCheck, Circle, X, RefreshCw, GitMerge } from 'lucide-react'
 import { Header } from '../components/Header'
 import { useCart } from '../contexts/CartContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -9,7 +9,7 @@ import { OrderItemCreate } from '../types'
 
 export default function CartPage() {
     const navigate = useNavigate()
-    const { items, updateQuantity, removeFromCart, totalPrice, totalItems, clearCart, toggleSelect, toggleSelectAll, removeSelected, selectedItems, selectedTotalPrice, isAllSelected } = useCart()
+    const { items, updateQuantity, removeFromCart, totalPrice, totalItems, clearCart, toggleSelect, toggleSelectAll, removeSelected, selectedItems, selectedTotalPrice, isAllSelected, hasPendingMerge, openMergeDialog, localItemCount, isLoading } = useCart()
     const { isAuthenticated, user } = useAuth()
     const [isProcessing, setIsProcessing] = useState(false)
     const [showSuccess, setShowSuccess] = useState(false)
@@ -108,9 +108,19 @@ export default function CartPage() {
         <div className="min-h-screen bg-secondary-50/50">
             <Header showSearch={false} />
             <main className="max-w-7xl mx-auto px-6 py-10">
-                <div className="flex items-center gap-6 mb-12 animate-in slide-in-from-left duration-500">
+                <div className="flex items-center gap-6 mb-12 animate-in slide-in-from-left duration-500 flex-wrap">
                     <button onClick={() => navigate(-1)} className="p-3 bg-white border border-secondary-100 text-secondary-400 hover:text-primary active:scale-90 rounded-2xl shadow-sm"><ArrowLeft className="h-5 w-5" /></button>
                     <h1 className="text-3xl font-black text-secondary-900 tracking-tighter italic">我的购物车 / {totalItems} ITEMS</h1>
+                    {isAuthenticated && hasPendingMerge && localItemCount > 0 && (
+                        <button
+                            onClick={openMergeDialog}
+                            disabled={isLoading}
+                            className="ml-auto flex items-center gap-3 px-6 py-3 bg-primary/10 text-primary border-2 border-primary/30 rounded-2xl font-black text-sm hover:bg-primary hover:text-white transition-all active:scale-95 disabled:opacity-50 animate-in pulse"
+                        >
+                            <GitMerge className="h-5 w-5" />
+                            <span>同步本地购物车 ({localItemCount}件)</span>
+                        </button>
+                    )}
                 </div>
                 <div className="flex flex-col lg:flex-row gap-10 items-start pb-32">
                     <div className="lg:col-span-2 flex-1 space-y-6">

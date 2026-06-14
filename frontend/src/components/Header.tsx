@@ -2,19 +2,26 @@ import React, { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
     Search, ShoppingCart, User, Zap, LogOut, Settings,
-    Heart, ShoppingBag, ChevronRight
+    Heart, ShoppingBag, ChevronRight, X, Minus, Plus, Trash2
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useCart } from '../contexts/CartContext'
+import { CartItem } from '../types'
+
+const formatSpecsLabel = (specs: Record<string, string>): string => {
+    return Object.entries(specs).map(([key, val]) => `${key}: ${val}`).join(' / ')
+}
 
 export const Header = React.memo(({ showSearch = true }: { showSearch?: boolean }) => {
     const navigate = useNavigate()
-    const { totalItems } = useCart()
+    const { items, totalItems, totalPrice, updateQuantity, removeFromCart } = useCart()
     const { user, isAuthenticated, logout } = useAuth()
     const [searchParams] = useSearchParams()
     const [query, setQuery] = useState(searchParams.get('q') || '')
     const [showUserMenu, setShowUserMenu] = useState(false)
+    const [showCartPanel, setShowCartPanel] = useState(false)
     const menuRef = React.useRef<HTMLDivElement>(null)
+    const cartPanelRef = React.useRef<HTMLDivElement>(null)
 
     React.useEffect(() => {
         setQuery(searchParams.get('q') || '')
@@ -24,6 +31,9 @@ export const Header = React.memo(({ showSearch = true }: { showSearch?: boolean 
         const handleClickOutside = (event: MouseEvent) => {
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
                 setShowUserMenu(false)
+            }
+            if (cartPanelRef.current && !cartPanelRef.current.contains(event.target as Node)) {
+                setShowCartPanel(false)
             }
         }
         document.addEventListener('mousedown', handleClickOutside)
@@ -65,12 +75,125 @@ export const Header = React.memo(({ showSearch = true }: { showSearch?: boolean 
                 )}
 
                 <div className="flex items-center gap-6">
-                    <Link to="/cart" className="relative p-3 text-secondary-500 dark:text-secondary-400 hover:text-primary dark:hover:text-primary hover:bg-primary/5 rounded-xl transition-all group">
-                        <ShoppingCart className="h-5 w-5 group-hover:scale-110 transition-transform" />
-                        {totalItems > 0 && (
-                            <span className="absolute -top-1 -right-1 bg-primary text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-lg shadow-primary/20 ring-2 ring-white dark:ring-secondary-900 animate-in zoom-in">{totalItems}</span>
+                    <div className="relative" ref={cartPanelRef}>
+                        <button
+                            onClick={() => setShowCartPanel(!showCartPanel)}
+                            className={`relative p-3 text-secondary-500 dark:text-secondary-400 hover:text-primary dark:hover:text-primary hover:bg-primary/5 rounded-xl transition-all group ${showCartPanel ? 'text-primary bg-primary/5' : ''}`}
+                        >
+                            <ShoppingCart className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                            {totalItems > 0 && (
+                                <span className="absolute -top-1 -right-1 bg-primary text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-lg shadow-primary/20 ring-2 ring-white dark:ring-secondary-900 animate-in zoom-in">{totalItems}</span>
+                            )}
+                        </button>
+
+                        {showCartPanel && (
+                            <div className="absolute top-full right-0 w-96 bg-white/95 dark:bg-secondary-800/95 backdrop-blur-xl rounded-[2rem] shadow-3xl border border-secondary-100/50 dark:border-secondary-700 overflow-hidden z-[110] mt-2 animate-in fade-in slide-in-from-top-4 duration-300 transition-colors">
+                                <div className="flex items-center justify-between p-5 border-b border-secondary-100 dark:border-secondary-700">
+                                    <div>
+                                        <p className="text-xs font-black text-secondary-900 dark:text-white uppercase tracking-widest">购物车</p>
+                                        <p className="text-[11px] font-bold text-secondary-400 dark:text-secondary-500 mt-0.5">{totalItems} 件商品</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowCartPanel(false)}
+                                        className="p-1.5 text-secondary-300 hover:text-secondary-500 hover:bg-secondary-100 dark:hover:bg-secondary-700 rounded-xl transition-colors"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                </div>
+
+                                {items.length === 0 ? (
+                                    <div className="py-16 text-center">
+                                        <ShoppingBag className="h-14 w-14 text-secondary-100 dark:text-secondary-700 mx-auto mb-4" />
+                                        <p className="text-sm font-bold text-secondary-300 dark:text-secondary-600">购物车是空的</p>
+                                        <button
+                                            onClick={() => { setShowCartPanel(false); navigate('/') }}
+                                            className="mt-4 text-xs font-black text-primary hover:text-primary-600 uppercase tracking-widest"
+                                        >
+                                            去逛逛 →
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="max-h-80 overflow-y-auto">
+                                            {items.slice(0, 5).map((item: CartItem) => {
+                                                const itemKey = `${item.id}-${JSON.stringify(item.selectedSpecs || {})}-${item.skuId || ''}`
+                                                return (
+                                                    <div key={itemKey} className="flex gap-4 p-4 border-b border-secondary-50 dark:border-secondary-700/50 last:border-0 group hover:bg-secondary-50/50 dark:hover:bg-secondary-700/30 transition-colors">
+                                                        <Link
+                                                            to={`/product/${item.id}`}
+                                                            onClick={() => setShowCartPanel(false)}
+                                                            className="shrink-0 w-16 h-16 rounded-xl overflow-hidden bg-secondary-100 dark:bg-secondary-700 shadow-sm"
+                                                        >
+                                                            <img src={item.main_image} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                                                        </Link>
+                                                        <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                                                            <Link
+                                                                to={`/product/${item.id}`}
+                                                                onClick={() => setShowCartPanel(false)}
+                                                                className="text-sm font-black text-secondary-900 dark:text-white hover:text-primary transition-colors truncate"
+                                                            >
+                                                                {item.name}
+                                                            </Link>
+                                                            {item.selectedSpecs && Object.keys(item.selectedSpecs).length > 0 && (
+                                                                <p className="text-[10px] font-bold text-secondary-400 dark:text-secondary-500 truncate mt-0.5">
+                                                                    {formatSpecsLabel(item.selectedSpecs)}
+                                                                </p>
+                                                            )}
+                                                            <div className="flex items-center justify-between mt-2">
+                                                                <span className="text-sm font-black text-primary">¥{item.price.toFixed(2)}</span>
+                                                                <div className="flex items-center gap-2 bg-secondary-50 dark:bg-secondary-700/50 rounded-lg p-0.5">
+                                                                    <button
+                                                                        onClick={async () => { try { await updateQuantity(item.id!, item.quantity - 1, item.selectedSpecs, item.skuId) } catch (e) { console.error(e) } }}
+                                                                        disabled={item.quantity <= 1}
+                                                                        className="w-6 h-6 bg-white dark:bg-secondary-600 rounded-md shadow-sm hover:text-primary disabled:opacity-30 transition-all active:scale-75"
+                                                                    >
+                                                                        <Minus className="h-3 w-3 mx-auto" />
+                                                                    </button>
+                                                                    <span className="w-5 text-center text-xs font-black text-secondary-900 dark:text-white tabular-nums">{item.quantity}</span>
+                                                                    <button
+                                                                        onClick={async () => { try { await updateQuantity(item.id!, item.quantity + 1, item.selectedSpecs, item.skuId) } catch (e) { console.error(e) } }}
+                                                                        className="w-6 h-6 bg-white dark:bg-secondary-600 rounded-md shadow-sm hover:text-primary transition-all active:scale-75"
+                                                                    >
+                                                                        <Plus className="h-3 w-3 mx-auto" />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={async () => { try { await removeFromCart(item.id!, item.selectedSpecs, item.skuId) } catch (e) { console.error(e) } }}
+                                                            className="shrink-0 p-1.5 text-secondary-200 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                )
+                                            })}
+                                            {items.length > 5 && (
+                                                <div className="p-3 text-center">
+                                                    <span className="text-[11px] font-bold text-secondary-300 dark:text-secondary-600">还有 {items.length - 5} 件商品...</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="p-5 bg-secondary-50/50 dark:bg-secondary-900/50 border-t border-secondary-100 dark:border-secondary-700">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <span className="text-xs font-bold text-secondary-400 dark:text-secondary-500 uppercase tracking-widest">合计</span>
+                                                <span className="text-xl font-black text-primary tracking-tighter italic">¥{totalPrice.toFixed(2)}</span>
+                                            </div>
+                                            <Link
+                                                to="/cart"
+                                                onClick={() => setShowCartPanel(false)}
+                                                className="flex items-center justify-center gap-2 w-full bg-secondary-900 dark:bg-primary text-white py-3.5 rounded-2xl font-black text-xs hover:bg-primary dark:hover:bg-primary-600 transition-all active:scale-95 shadow-xl shadow-secondary-900/10 uppercase tracking-[0.2em] group"
+                                            >
+                                                查看购物车
+                                                <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                                            </Link>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                         )}
-                    </Link>
+                    </div>
 
                     {isAuthenticated ? (
                         <div className="relative" ref={menuRef}>

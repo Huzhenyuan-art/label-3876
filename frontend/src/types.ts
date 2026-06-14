@@ -49,7 +49,7 @@ export interface Product {
     sales: number
     main_image: string
     images: { gallery?: string[] } | null
-    specs: ProductSpec[] | null
+    specs: ProductSpec[] | Record<string, string[]> | null
     skus: Sku[] | null
     shop_id: number
     category_id: number | null

@@ -9,29 +9,66 @@ import { useFavorites } from '../contexts/FavoritesContext'
 
 import { MOCK_PRODUCTS } from '../mocks'
 
-function extractSpecs(specs: ProductSpec[] | null): Record<string, string> {
-  if (!specs || !Array.isArray(specs)) return {}
+function extractSpecs(specs: ProductSpec[] | Record<string, string[]> | null): Record<string, string> {
+  if (!specs) return {}
   const result: Record<string, string> = {}
-  for (const spec of specs) {
-    if (!spec || typeof spec !== 'object') continue
-    if (!spec.name || !Array.isArray(spec.values)) continue
-    const firstVal = spec.values[0]
-    result[spec.name] = (firstVal && typeof firstVal === 'object' && 'value' in firstVal) ? firstVal.value : (typeof firstVal === 'string' ? firstVal : '')
+  
+  if (Array.isArray(specs)) {
+    for (const spec of specs) {
+      if (!spec || typeof spec !== 'object') continue
+      if (typeof spec.name !== 'string' || !Array.isArray(spec.values)) continue
+      const firstVal = spec.values[0]
+      result[spec.name] = (firstVal && typeof firstVal === 'object' && 'value' in firstVal) ? firstVal.value : (typeof firstVal === 'string' ? firstVal : '')
+    }
+  } else if (typeof specs === 'object') {
+    for (const [name, values] of Object.entries(specs)) {
+      if (Array.isArray(values) && values.length > 0) {
+        result[name] = values[0]
+      }
+    }
   }
   return result
 }
 
-function safeSpecEntries(specs: ProductSpec[] | null): { name: string; values: { value: string }[] }[] {
-  if (!specs || !Array.isArray(specs)) return []
-  return specs
-    .filter((spec): spec is ProductSpec => !!spec && typeof spec === 'object' && spec !== null && typeof spec.name === 'string' && Array.isArray(spec.values))
-    .map(spec => ({
-      name: spec.name,
-      values: spec.values
-        .filter((v): v is { value: string } => v != null && (typeof v === 'object' ? typeof v.value === 'string' : typeof v === 'string'))
-        .map(v => typeof v === 'object' ? v : { value: v }),
-    }))
-    .filter(spec => spec.values.length > 0)
+function safeSpecEntries(specs: ProductSpec[] | Record<string, string[]> | null): { name: string; values: { value: string }[] }[] {
+  if (!specs) return []
+  const result: { name: string; values: { value: string }[] }[] = []
+  
+  if (Array.isArray(specs)) {
+    for (const spec of specs) {
+      if (!spec || typeof spec !== 'object') continue
+      if (typeof spec.name !== 'string') continue
+      if (!spec.values || !Array.isArray(spec.values)) continue
+      
+      const values: { value: string }[] = []
+      for (const v of spec.values) {
+        if (v == null) continue
+        if (typeof v === 'object' && typeof v.value === 'string') {
+          values.push({ value: v.value })
+        } else if (typeof v === 'string') {
+          values.push({ value: v })
+        }
+      }
+      
+      if (values.length > 0) {
+        result.push({ name: spec.name, values })
+      }
+    }
+  } else if (typeof specs === 'object') {
+    for (const [name, values] of Object.entries(specs)) {
+      if (!Array.isArray(values)) continue
+      const cleanedValues: { value: string }[] = []
+      for (const v of values) {
+        if (typeof v === 'string') {
+          cleanedValues.push({ value: v })
+        }
+      }
+      if (cleanedValues.length > 0) {
+        result.push({ name, values: cleanedValues })
+      }
+    }
+  }
+  return result
 }
 
 export default function ProductDetailPage() {

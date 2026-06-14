@@ -65,12 +65,20 @@ export const findSkuBySpecs = (product: Product, specs: Record<string, string>):
     })
 }
 
+export const LOW_STOCK_THRESHOLD = 20
+
 export const getProductPriceAndStock = (product: Product, specs: Record<string, string>): { price: number; original_price: number | null; stock: number; skuId?: number } => {
     const sku = findSkuBySpecs(product, specs)
     if (sku) {
         return { price: sku.price, original_price: sku.original_price ?? product.original_price, stock: sku.stock, skuId: sku.id }
     }
     return { price: product.price, original_price: product.original_price, stock: product.stock }
+}
+
+export const calculateDiscount = (price: number, originalPrice: number | null): number | null => {
+    if (!originalPrice || originalPrice <= price || originalPrice <= 0) return null
+    const discount = (price / originalPrice) * 10
+    return Math.round(discount * 10) / 10
 }
 
 export interface ChatMessage {

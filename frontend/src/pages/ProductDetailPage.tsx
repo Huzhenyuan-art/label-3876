@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Minus, Plus, MessageCircle, Store, ShoppingCart, Check, Heart, Sparkles, Zap } from 'lucide-react'
+import { Minus, Plus, MessageCircle, Store, ShoppingCart, Check, Heart, Sparkles, Zap, Percent, AlertTriangle } from 'lucide-react'
 import { Header } from '../components/Header'
-import { Product, ProductSpec, getProductPriceAndStock } from '../types'
+import { Product, ProductSpec, getProductPriceAndStock, calculateDiscount, LOW_STOCK_THRESHOLD } from '../types'
 import { productApi } from '../api'
 import { useCart } from '../contexts/CartContext'
 import { useFavorites } from '../contexts/FavoritesContext'
@@ -152,9 +152,12 @@ export default function ProductDetailPage() {
     }
   }
 
-  const { price: displayPrice, original_price: displayOriginalPrice, stock: displayStock, skuId: currentSkuId } = useMemo(() => {
-    if (!product) return { price: 0, original_price: null, stock: 0, skuId: undefined }
-    return getProductPriceAndStock(product, selectedSpecs)
+  const { price: displayPrice, original_price: displayOriginalPrice, stock: displayStock, skuId: currentSkuId, discount, isLowStock } = useMemo(() => {
+    if (!product) return { price: 0, original_price: null, stock: 0, skuId: undefined, discount: null, isLowStock: false }
+    const priceInfo = getProductPriceAndStock(product, selectedSpecs)
+    const discount = calculateDiscount(priceInfo.price, priceInfo.original_price)
+    const isLowStock = priceInfo.stock > 0 && priceInfo.stock <= LOW_STOCK_THRESHOLD
+    return { ...priceInfo, discount, isLowStock }
   }, [product, selectedSpecs])
 
   const specEntries = useMemo(() => safeSpecEntries(product?.specs ?? null), [product])
@@ -217,12 +220,29 @@ export default function ProductDetailPage() {
               <h1 className="text-4xl font-black text-secondary-900 dark:text-white mb-4 tracking-tighter italic uppercase">{product.name}</h1>
               <p className="text-secondary-400 dark:text-secondary-500 mb-10 font-bold leading-relaxed italic">{product.description}</p>
               <div className="bg-secondary-50 dark:bg-secondary-800 p-8 rounded-2xl border border-secondary-100 dark:border-secondary-700 mb-10 transition-colors">
-                <span className="text-5xl font-black text-primary tracking-tighter italic">¥{displayPrice.toFixed(2)}</span>
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-5xl font-black text-primary tracking-tighter italic">¥{displayPrice.toFixed(2)}</span>
+                  {discount !== null && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-primary to-primary-600 text-white text-xs font-black rounded-xl shadow-lg shadow-primary/30 uppercase tracking-wider">
+                      <Percent className="h-3.5 w-3.5" />
+                      {discount}折
+                    </span>
+                  )}
+                </div>
                 {displayOriginalPrice && displayOriginalPrice > displayPrice && (
-                  <span className="ml-4 text-xl font-bold text-secondary-300 dark:text-secondary-600 line-through tracking-tighter">¥{displayOriginalPrice.toFixed(2)}</span>
+                  <span className="text-xl font-bold text-secondary-300 dark:text-secondary-600 line-through tracking-tighter">¥{displayOriginalPrice.toFixed(2)}</span>
                 )}
                 <div className="flex items-center gap-4 text-xs font-black text-secondary-400 dark:text-secondary-500 pt-4 border-t border-secondary-200/50 dark:border-secondary-700 mt-4 uppercase tracking-widest">
-                  <span>月销量 {product.sales}+</span><span className="w-px h-3 bg-secondary-200 dark:bg-secondary-700" /><span>当前库存 {displayStock} 件</span>
+                  <span>月销量 {product.sales}+</span>
+                  <span className="w-px h-3 bg-secondary-200 dark:bg-secondary-700" />
+                  {isLowStock ? (
+                    <span className="flex items-center gap-1.5 text-red-500">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      库存紧张 仅剩 {displayStock} 件
+                    </span>
+                  ) : (
+                    <span>当前库存 {displayStock} 件</span>
+                  )}
                 </div>
               </div>
               {specEntries.map((spec) => (

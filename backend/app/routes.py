@@ -459,6 +459,14 @@ async def pay_order(
         )
 
 
+async def refresh_cart(db: AsyncSession, user_id: int) -> Cart:
+    result = await db.execute(select(Cart).where(Cart.user_id == user_id))
+    cart = result.scalar_one_or_none()
+    if not cart:
+        cart = await get_or_create_cart(db, user_id)
+    return cart
+
+
 async def get_or_create_cart(db: AsyncSession, user_id: int) -> Cart:
     result = await db.execute(select(Cart).where(Cart.user_id == user_id))
     cart = result.scalar_one_or_none()
@@ -535,7 +543,7 @@ async def add_cart_item(
 
     try:
         await db.commit()
-        await db.refresh(cart)
+        cart = await refresh_cart(db, current_user.id)
         return cart
     except IntegrityError:
         await db.rollback()
@@ -573,8 +581,7 @@ async def update_cart_item(
 
     try:
         await db.commit()
-        cart_result = await db.execute(select(Cart).where(Cart.user_id == current_user.id))
-        cart = cart_result.scalar_one()
+        cart = await refresh_cart(db, current_user.id)
         return cart
     except IntegrityError:
         await db.rollback()
@@ -602,10 +609,7 @@ async def remove_cart_item(
     await db.delete(cart_item)
     try:
         await db.commit()
-        cart_result = await db.execute(select(Cart).where(Cart.user_id == current_user.id))
-        cart = cart_result.scalar_one_or_none()
-        if not cart:
-            cart = await get_or_create_cart(db, current_user.id)
+        cart = await refresh_cart(db, current_user.id)
         return cart
     except IntegrityError:
         await db.rollback()
@@ -625,7 +629,7 @@ async def clear_cart(
         await db.delete(item)
     try:
         await db.commit()
-        await db.refresh(cart)
+        cart = await refresh_cart(db, current_user.id)
         return cart
     except IntegrityError:
         await db.rollback()
@@ -685,7 +689,7 @@ async def merge_cart(
 
     try:
         await db.commit()
-        await db.refresh(cart)
+        cart = await refresh_cart(db, current_user.id)
         return cart
     except IntegrityError:
         await db.rollback()

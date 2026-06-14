@@ -80,3 +80,71 @@ try {
 4. 刷新页面或导航离开再返回
 5. 确认关注状态仍然显示为"已关注"
 6. 打开浏览器控制台，确认没有 `Failed to load follow status` 相关错误
+
+---
+
+## Bug: Docker 构建失败 - npm ci 报 package-lock.json 不同步
+
+### 问题描述
+执行 `docker compose build` 时，前端构建阶段 `npm ci` 报错，提示 `package.json` 与 `package-lock.json` 不同步：
+
+```
+#13 [web builder 4/6] RUN npm config set registry https://registry.npmmirror.com && npm ci
+#13 22.85 npm error `npm ci` can only install packages when your package.json and package-lock.json are in sync.
+#13 22.85 npm error Missing: @testing-library/jest-dom@6.9.1 from lock file
+#13 22.85 npm error Missing: @testing-library/react@14.3.1 from lock file
+#13 22.85 npm error Missing: vitest@1.6.1 from lock file
+#13 22.85 npm error Missing: jsdom@23.2.0 from lock file
+#13 22.85 ... (数十个缺失的依赖包)
+```
+
+### 问题根因
+
+**文件**: `frontend/package.json` 和 `frontend/package-lock.json`
+
+**原因**: 在为项目添加自动化测试时，向 `package.json` 的 `devDependencies` 中添加了测试相关依赖（vitest、@testing-library/react、@testing-library/jest-dom、jsdom 等），但没有同步更新 `package-lock.json`。
+
+`npm ci` 命令要求 `package-lock.json` 必须与 `package.json` 完全一致，它会严格校验 lock file 中是否包含 `package.json` 声明的每一个依赖。当发现新增的依赖在 lock file 中缺失时，直接报错退出，不会自动安装。
+
+Dockerfile 中的构建流程：
+```dockerfile
+COPY package*.json ./
+RUN npm config set registry https://registry.npmmirror.com && \
+    npm ci
+```
+
+`npm ci` 读取 `package.json` 和 `package-lock.json`，发现新增的测试依赖在 lock file 中不存在，构建失败。
+
+### 修复方案
+
+在 `frontend` 目录下执行 `npm install` 重新生成与 `package.json` 同步的 `package-lock.json`：
+
+```bash
+cd frontend
+npm install --registry https://registry.npmmirror.com
+```
+
+执行后 `package-lock.json` 会被自动更新，包含所有新增的测试依赖及其子依赖：
+
+- `vitest@^1.2.0` 及其依赖（@vitest/coverage-v8、magic-string、magicast 等）
+- `@testing-library/react@^14.1.2` 及其依赖（@testing-library/dom、aria-query 等）
+- `@testing-library/jest-dom@^6.2.0` 及其依赖
+- `@testing-library/user-event@^14.5.2`
+- `jsdom@^23.2.0` 及其依赖（cssstyle、parse5、saxes、tough-cookie、ws 等）
+
+### 修复的文件
+1. `frontend/package-lock.json` - 重新生成，与 package.json 同步
+
+### 预防措施
+
+以后修改 `package.json` 添加或删除依赖时，必须同步执行 `npm install` 更新 `package-lock.json`，确保两者一致后再提交。可以遵循以下规则：
+
+1. **修改依赖后立即执行** `npm install` 更新 lock file
+2. **提交前检查**：`git diff package-lock.json` 确认有变更
+3. **CI/CD 流水线**：可添加 `npm ci --dry-run` 检查步骤，提前发现不同步问题
+
+### 验证方法
+1. 执行 `docker compose build web` 构建前端镜像
+2. 确认 `npm ci` 步骤成功完成，不再报 `Missing: xxx from lock file` 错误
+3. 确认后续 `npm run build` 步骤成功执行
+4. 确认前端容器正常启动

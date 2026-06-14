@@ -15,7 +15,7 @@ const MOCK_PRODUCTS: Product[] = [
     id: 1, name: '降噪无线蓝牙耳机 Pro', description: '采用主动降噪技术，为您带来沉浸式听觉盛宴。', price: 1299, original_price: 1599, stock: 50, sales: 1200,
     main_image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=600',
     images: { gallery: ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e', 'https://images.unsplash.com/photo-1484704849700-f032a568e944'] },
-    specs: { '颜色': ['月岩灰', '暗夜黑'], '配置': ['标准版', 'Pro版'] }, shop_id: 1, created_at: '2024-01-01'
+    specs: [{ name: '颜色', values: [{ value: '月岩灰' }, { value: '暗夜黑' }] }, { name: '配置', values: [{ value: '标准版' }, { value: 'Pro版' }] }], skus: null, shop_id: 1, category_id: null, created_at: '2024-01-01'
   }
 ]
 

@@ -1,14 +1,38 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Minus, Plus, MessageCircle, Store, ShoppingCart, Check, Heart, Sparkles, Zap } from 'lucide-react'
 import { Header } from '../components/Header'
-import { Product, getProductPriceAndStock } from '../types'
+import { Product, ProductSpec, getProductPriceAndStock } from '../types'
 import { productApi } from '../api'
 import { useCart } from '../contexts/CartContext'
 import { useFavorites } from '../contexts/FavoritesContext'
-import { useAuth } from '../contexts/AuthContext'
 
 import { MOCK_PRODUCTS } from '../mocks'
+
+function extractSpecs(specs: ProductSpec[] | null): Record<string, string> {
+  if (!specs || !Array.isArray(specs)) return {}
+  const result: Record<string, string> = {}
+  for (const spec of specs) {
+    if (!spec || typeof spec !== 'object') continue
+    if (!spec.name || !Array.isArray(spec.values)) continue
+    const firstVal = spec.values[0]
+    result[spec.name] = (firstVal && typeof firstVal === 'object' && 'value' in firstVal) ? firstVal.value : (typeof firstVal === 'string' ? firstVal : '')
+  }
+  return result
+}
+
+function safeSpecEntries(specs: ProductSpec[] | null): { name: string; values: { value: string }[] }[] {
+  if (!specs || !Array.isArray(specs)) return []
+  return specs
+    .filter((spec): spec is ProductSpec => !!spec && typeof spec === 'object' && spec !== null && typeof spec.name === 'string' && Array.isArray(spec.values))
+    .map(spec => ({
+      name: spec.name,
+      values: spec.values
+        .filter((v): v is { value: string } => v != null && (typeof v === 'object' ? typeof v.value === 'string' : typeof v === 'string'))
+        .map(v => typeof v === 'object' ? v : { value: v }),
+    }))
+    .filter(spec => spec.values.length > 0)
+}
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -24,15 +48,36 @@ export default function ProductDetailPage() {
   const [showToast, setShowToast] = useState(false)
   const [recommended, setRecommended] = useState<Product[]>([])
   const [recLoading, setRecLoading] = useState(false)
+  const mountedRef = useRef(true)
 
   useEffect(() => {
-    if (id) loadProduct(parseInt(id))
+    return () => { mountedRef.current = false }
+  }, [])
+
+  useEffect(() => {
+    setLoading(true)
+    setProduct(null)
+    setSelectedSpecs({})
+    setQuantity(1)
+    setSelectedImage(0)
+    setRecommended([])
+    if (id) {
+      const productId = parseInt(id, 10)
+      if (!isNaN(productId)) {
+        loadProduct(productId)
+      } else {
+        setLoading(false)
+      }
+    } else {
+      setLoading(false)
+    }
   }, [id])
 
   const loadRecommended = async (catId: number | null, shopId: number, productId: number) => {
     setRecLoading(true)
     try {
       const list = await productApi.getRecommended(catId, shopId, productId)
+      if (!mountedRef.current) return
       if (list.length > 0) {
         setRecommended(list)
       } else {
@@ -40,52 +85,42 @@ export default function ProductDetailPage() {
         setRecommended(catId != null ? fallback.filter(p => p.category_id === catId) : fallback.filter(p => p.shop_id === shopId))
       }
     } catch {
+      if (!mountedRef.current) return
       const fallback = MOCK_PRODUCTS.filter(p => p.id !== productId)
       setRecommended(catId != null ? fallback.filter(p => p.category_id === catId) : fallback.filter(p => p.shop_id === shopId))
     } finally {
-      setRecLoading(false)
+      if (mountedRef.current) setRecLoading(false)
     }
   }
 
   const loadProduct = async (productId: number) => {
     try {
       const response = await productApi.getById(productId)
+      if (!mountedRef.current) return
       const p = response.data
       setProduct(p)
-      if (p.specs && p.specs.length > 0) {
-        const initialSpecs: Record<string, string> = {}
-        p.specs.forEach((spec: any) => {
-          const specName = typeof spec === 'object' ? spec.name : spec
-          const specValues = typeof spec === 'object' ? spec.values : p.specs[spec]
-          const firstValue = Array.isArray(specValues) && specValues.length > 0
-            ? (typeof specValues[0] === 'object' ? specValues[0].value : specValues[0])
-            : ''
-          initialSpecs[specName] = firstValue
-        })
-        setSelectedSpecs(initialSpecs)
-      }
+      setSelectedSpecs(extractSpecs(p.specs))
       loadRecommended(p.category_id, p.shop_id, productId)
     } catch (error) {
+      if (!mountedRef.current) return
       console.error(error)
       const mockProduct = MOCK_PRODUCTS.find(p => p.id === productId)
       if (mockProduct) {
         setProduct(mockProduct)
-        if (mockProduct.specs && mockProduct.specs.length > 0) {
-          const initialSpecs: Record<string, string> = {}
-          mockProduct.specs.forEach((spec: any) => {
-            initialSpecs[spec.name] = spec.values[0]?.value || spec.values[0] || ''
-          })
-          setSelectedSpecs(initialSpecs)
-        }
+        setSelectedSpecs(extractSpecs(mockProduct.specs))
         loadRecommended(mockProduct.category_id, mockProduct.shop_id, productId)
       }
-    } finally { setLoading(false) }
+    } finally {
+      if (mountedRef.current) setLoading(false)
+    }
   }
 
   const { price: displayPrice, original_price: displayOriginalPrice, stock: displayStock, skuId: currentSkuId } = useMemo(() => {
     if (!product) return { price: 0, original_price: null, stock: 0, skuId: undefined }
     return getProductPriceAndStock(product, selectedSpecs)
   }, [product, selectedSpecs])
+
+  const specEntries = useMemo(() => safeSpecEntries(product?.specs ?? null), [product])
 
   const handleAddToCart = () => {
     if (!product) return
@@ -146,29 +181,22 @@ export default function ProductDetailPage() {
                   <span>月销量 {product.sales}+</span><span className="w-px h-3 bg-secondary-200 dark:bg-secondary-700" /><span>当前库存 {displayStock} 件</span>
                 </div>
               </div>
-              {product.specs && product.specs.map((spec: any) => {
-                const specName = typeof spec === 'object' ? spec.name : spec
-                const specValues = typeof spec === 'object' ? spec.values : (product.specs as any)[spec] || []
-                return (
-                  <div key={specName} className="mb-8">
-                    <h3 className="text-xs font-black text-secondary-500 dark:text-secondary-400 uppercase tracking-widest mb-4">{specName}</h3>
-                    <div className="flex flex-wrap gap-3">
-                      {specValues.map((val: any) => {
-                        const value = typeof val === 'object' ? val.value : val
-                        return (
-                          <button
-                            key={value}
-                            onClick={() => setSelectedSpecs(prev => ({ ...prev, [specName]: value }))}
-                            className={`px-6 py-3 rounded-xl border-2 transition-all font-black text-xs ${selectedSpecs[specName] === value ? 'border-primary bg-primary text-white shadow-2xl scale-105' : 'border-secondary-100 dark:border-secondary-700 text-secondary-600 dark:text-secondary-400 hover:border-primary/50'}`}
-                          >
-                            {value}
-                          </button>
-                        )
-                      })}
-                    </div>
+              {specEntries.map((spec) => (
+                <div key={spec.name} className="mb-8">
+                  <h3 className="text-xs font-black text-secondary-500 dark:text-secondary-400 uppercase tracking-widest mb-4">{spec.name}</h3>
+                  <div className="flex flex-wrap gap-3">
+                    {spec.values.map((val) => (
+                      <button
+                        key={val.value}
+                        onClick={() => setSelectedSpecs(prev => ({ ...prev, [spec.name]: val.value }))}
+                        className={`px-6 py-3 rounded-xl border-2 transition-all font-black text-xs ${selectedSpecs[spec.name] === val.value ? 'border-primary bg-primary text-white shadow-2xl scale-105' : 'border-secondary-100 dark:border-secondary-700 text-secondary-600 dark:text-secondary-400 hover:border-primary/50'}`}
+                      >
+                        {val.value}
+                      </button>
+                    ))}
                   </div>
-                )
-              })}
+                </div>
+              ))}
               <div className="mb-10">
                 <h3 className="text-xs font-black text-secondary-500 dark:text-secondary-400 mb-4 uppercase tracking-widest">购买数量</h3>
                 <div className="flex items-center bg-secondary-50 dark:bg-secondary-800 w-fit p-1.5 rounded-xl border border-secondary-100 dark:border-secondary-700 shadow-inner transition-colors">

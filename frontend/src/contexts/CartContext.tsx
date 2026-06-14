@@ -21,14 +21,18 @@ const CartContext = createContext<CartContextType | undefined>(undefined)
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<CartItem[]>(() => {
-    const saved = localStorage.getItem('cart')
-    if (saved) {
-      const parsed = JSON.parse(saved) as CartItem[]
-      return parsed.map((item) => ({
-        ...item,
-        selected: item.selected !== false,
-        selectedSpecs: item.selectedSpecs || {}
-      }))
+    try {
+      const saved = localStorage.getItem('cart')
+      if (saved) {
+        const parsed = JSON.parse(saved) as CartItem[]
+        return parsed.map((item) => ({
+          ...item,
+          selected: item.selected !== false,
+          selectedSpecs: item.selectedSpecs || {}
+        }))
+      }
+    } catch {
+      localStorage.removeItem('cart')
     }
     return []
   })

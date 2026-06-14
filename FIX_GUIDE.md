@@ -296,6 +296,73 @@ async def refresh_cart(db: AsyncSession, user_id: int) -> Cart:
 
 ---
 
+### 问题 6：合并购物车后 UI 不刷新，需手动刷新页面才显示合并结果
+
+#### 问题描述
+用户在同步对话框中选择任意策略（特别是"保留服务端"）后，购物车页面没有立即显示合并后的商品，需要手动刷新浏览器页面才能看到更新后的购物车内容。
+
+#### 根本原因
+**双数据源切换时 `keep_server` 策略没有刷新 `serverItems` 状态，以及 `merge/replace` 策略缺少调试日志难以排查**
+
+执行流程分析：
+1. 用户点击"保留服务端"按钮
+2. 前端 `mergeLocalCart('keep_server')` 执行
+3. 原代码直接调用 `clearLocalCartSync()` + `setShowMergeDialog(false)` 然后 `return`
+4. **`serverItems` 状态从未被更新**
+5. 如果用户登录后还没触发过 `fetchServerCart()`（比如在未登录页登录直接弹出对话框），`serverItems` 还是空数组 `[]`
+6. `activeItems = isAuthenticated ? serverItems : localItems` → 显示空数组
+7. 手动刷新页面后，初始化的 `useEffect` 触发 `fetchServerCart()`，`serverItems` 才被填充，UI 显示正确
+
+对于 `merge` 和 `replace` 策略，虽然代码里有 `setServerItems(newServerItems)`，但缺少调试日志，一旦后端返回数据有问题（比如 items 为空或 product 未加载），难以快速定位是前端转换问题还是后端数据问题。
+
+#### 修复方案
+
+**文件 1：`frontend/src/contexts/CartContext.tsx`**
+
+1. **`keep_server` 策略增加 `await fetchServerCart()`**：确保保留服务端后从后端拉取最新购物车数据更新 `serverItems`
+```typescript
+if (strategy === 'keep_server') {
+  console.log('[CartMerge] keep_server strategy: refreshing server cart')
+  await fetchServerCart()  // ← 新增：从服务端拉取最新数据
+  clearLocalCartSync()
+  setShowMergeDialog(false)
+  return
+}
+```
+
+2. **增加详细调试日志**：在 `merge/replace` 策略的 items 转换过程中打印每个 item 的转换结果，便于排查数据问题
+```typescript
+const converted = serverCartItemToCartItem(serverItem, newSelectedState[key] ?? true)
+console.log('[CartMerge] Converted item:', {
+  serverItemId: serverItem.id,
+  productId: serverItem.product_id,
+  hasProduct: !!serverItem.product,
+  convertedId: converted.id,
+  convertedName: converted.name,
+})
+return converted
+```
+以及：
+```typescript
+console.log('[CartMerge] New server items count:', newServerItems.length)
+```
+
+3. **更新 `useCallback` 依赖数组**：新增 `fetchServerCart` 依赖
+```typescript
+}, [isAuthenticated, selectedState, clearLocalCartSync, fetchServerCart])
+```
+
+**文件 2：`backend/app/routes.py`**
+
+**`keep_server` 分支统一使用 `refresh_cart()`**：虽然前端现在不走 API（直接 fetchServerCart），但保持后端代码一致性，防止未来前端改回调用 API 时出问题
+```python
+if merge_data.merge_strategy == "keep_server":
+    cart = await refresh_cart(db, current_user.id)  # ← 替换原 return cart
+    return cart
+```
+
+---
+
 ## 核心修复点总结（最终版）
 
 | 模块 | 变更类型 | 说明 |
@@ -306,11 +373,14 @@ async def refresh_cart(db: AsyncSession, user_id: int) -> Cart:
 | `CartContext.tsx` | 新增 | `clearLocalCartSync()` 同步清空本地购物车（防竞态） |
 | `CartContext.tsx` | 修改 | `dismissMergeDialog()` 不再清空待合并数据 |
 | `CartContext.tsx` | 修改 | `mergeLocalCart()` 增加空数据校验、错误抛出、状态清理 |
+| `CartContext.tsx` | 修改 | `mergeLocalCart()` keep_server 策略增加 `await fetchServerCart()` 刷新 UI |
+| `CartContext.tsx` | 修改 | `mergeLocalCart()` 增加 item 转换详细调试日志 |
 | `CartContext.tsx` | 修改 | 初始化逻辑增加 `hasPendingMergeFlag()` 双重校验 + 调试日志 |
 | `CartPage.tsx` | 新增 | 购物车页面顶部同步按钮（待合并时显示） |
 | `CartMergeDialog.tsx` | 重写 | 添加按钮级 loading、成功/错误视觉反馈、详细调试日志 |
 | `routes.py` | 新增 | `refresh_cart()` 辅助函数，通过 select 查询重新加载 selectin 关系 |
 | `routes.py` | 修改 | 所有购物车端点 commit 后统一使用 `refresh_cart()` 替代 `db.refresh()` |
+| `routes.py` | 修改 | `merge_cart` keep_server 分支也使用 `refresh_cart()` 返回完整数据 |
 
 ---
 
@@ -321,18 +391,23 @@ async def refresh_cart(db: AsyncSession, user_id: int) -> Cart:
 3. **测试稍后处理**：点击"稍后处理"，对话框关闭
 4. **验证手动同步入口**：进入购物车页面，应看到顶部显示"同步本地购物车 (N件)"按钮
 5. **测试手动同步**：点击同步按钮，应重新弹出合并对话框
-6. **测试"保留服务端"策略**：
+6. **测试"保留服务端"策略（UI 即时刷新验证）**：
+   - 先在服务端购物车添加一些商品（登录后正常加购）
+   - 退出登录，在本地购物车添加另一些商品
+   - 重新登录，弹出同步对话框
    - 点击"保留服务端"，应看到按钮 loading 动画，然后成功提示
+   - **验证（关键）**：对话框关闭后，购物车页面应**立即显示服务端商品**，不需要刷新页面
    - 立即刷新页面
    - **验证**：刷新后不应再弹出购物车同步对话框
    - **验证**：购物车页面不再显示"同步本地购物车"按钮
-7. **测试"合并购物车"策略**：
+7. **测试"合并购物车"策略（UI 即时刷新验证）**：
    - 重复步骤1-5
-   - 点击"合并购物车"，应看到按钮 loading 动画和**绿色成功提示**（不再是 Network Error）
-   - 服务端购物车应包含本地商品
+   - 点击"合并购物车"，应看到按钮 loading 动画和**绿色成功提示**
+   - **验证（关键）**：对话框关闭后，购物车页面应**立即显示合并后的所有商品**，不需要刷新页面
    - 刷新页面后不应再弹出对话框
-8. **测试"替换服务端"策略**：
+8. **测试"替换服务端"策略（UI 即时刷新验证）**：
    - 重复步骤1-5
-   - 点击"替换服务端"，验证按钮状态和结果
-9. **验证浏览器 DevTools Console**：操作过程中应看到 `[CartInit]`、`[CartMerge]`、`[CartSync]` 等前缀的调试日志
+   - 点击"替换服务端"，验证按钮状态
+   - **验证（关键）**：对话框关闭后，购物车页面应**立即显示原本地购物车的商品**（已替换到服务端）
+9. **验证浏览器 DevTools Console**：操作过程中应看到 `[CartInit]`、`[CartMerge]`、`[CartSync]` 等前缀的调试日志，合并时应看到 `[CartMerge] Converted item:` 和 `[CartMerge] New server items count:` 输出
 10. **验证后端日志**：合并操作不应出现 500 错误或 MissingGreenlet 异常

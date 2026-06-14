@@ -226,6 +226,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (strategy === 'keep_server') {
+        console.log('[CartMerge] keep_server strategy: refreshing server cart')
+        await fetchServerCart()
         clearLocalCartSync()
         setShowMergeDialog(false)
         return
@@ -250,9 +252,18 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (localItem) {
           newSelectedState[key] = localItem.selected ?? true
         }
-        return serverCartItemToCartItem(serverItem, newSelectedState[key] ?? true)
+        const converted = serverCartItemToCartItem(serverItem, newSelectedState[key] ?? true)
+        console.log('[CartMerge] Converted item:', {
+          serverItemId: serverItem.id,
+          productId: serverItem.product_id,
+          hasProduct: !!serverItem.product,
+          convertedId: converted.id,
+          convertedName: converted.name,
+        })
+        return converted
       })
 
+      console.log('[CartMerge] New server items count:', newServerItems.length)
       setSelectedState(newSelectedState)
       setServerItems(newServerItems)
       clearLocalCartSync()
@@ -263,7 +274,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoading(false)
     }
-  }, [isAuthenticated, selectedState, clearLocalCartSync])
+  }, [isAuthenticated, selectedState, clearLocalCartSync, fetchServerCart])
 
   const openMergeDialog = useCallback(() => {
     if (!isAuthenticated) return

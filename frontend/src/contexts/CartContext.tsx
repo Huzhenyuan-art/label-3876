@@ -3,11 +3,11 @@ import { Product, CartItem } from '../types'
 
 interface CartContextType {
   items: CartItem[]
-  addToCart: (product: Product, quantity: number, specs?: Record<string, string>) => void
-  removeFromCart: (productId: number, specs?: Record<string, string>) => void
-  updateQuantity: (productId: number, quantity: number, specs?: Record<string, string>) => void
+  addToCart: (product: Product, quantity: number, specs: Record<string, string>, skuId?: number) => void
+  removeFromCart: (productId: number, specs?: Record<string, string>, skuId?: number) => void
+  updateQuantity: (productId: number, quantity: number, specs?: Record<string, string>, skuId?: number) => void
   clearCart: () => void
-  toggleSelect: (productId: number, specs?: Record<string, string>) => void
+  toggleSelect: (productId: number, specs?: Record<string, string>, skuId?: number) => void
   toggleSelectAll: (selected: boolean) => void
   removeSelected: () => void
   totalItems: number
@@ -24,7 +24,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const saved = localStorage.getItem('cart')
     if (saved) {
       const parsed = JSON.parse(saved) as CartItem[]
-      return parsed.map((item) => ({ ...item, selected: item.selected !== false }))
+      return parsed.map((item) => ({
+        ...item,
+        selected: item.selected !== false,
+        selectedSpecs: item.selectedSpecs || {}
+      }))
     }
     return []
   })
@@ -33,12 +37,16 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('cart', JSON.stringify(items))
   }, [items])
 
-  const addToCart = (product: Product, quantity: number, specs?: Record<string, string>) => {
+  const getItemKey = (productId: number, specs?: Record<string, string>, skuId?: number): string => {
+    if (skuId) return `${productId}-sku-${skuId}`
+    return `${productId}-${JSON.stringify(specs || {})}`
+  }
+
+  const addToCart = (product: Product, quantity: number, specs: Record<string, string>, skuId?: number) => {
     setItems((prev) => {
+      const itemKey = getItemKey(product.id, specs, skuId)
       const existingItemIndex = prev.findIndex(
-        (item) =>
-          item.id === product.id &&
-          JSON.stringify(item.selectedSpecs) === JSON.stringify(specs)
+        (item) => getItemKey(item.id, item.selectedSpecs, item.skuId) === itemKey
       )
 
       if (existingItemIndex > -1) {
@@ -50,23 +58,22 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return newItems
       }
 
-      return [...prev, { ...product, quantity, selectedSpecs: specs, selected: true }]
+      return [...prev, { ...product, quantity, selectedSpecs: specs, skuId, selected: true }]
     })
   }
 
-  const removeFromCart = (productId: number, specs?: Record<string, string>) => {
+  const removeFromCart = (productId: number, specs?: Record<string, string>, skuId?: number) => {
+    const itemKey = getItemKey(productId, specs, skuId)
     setItems((prev) =>
-      prev.filter(
-        (item) =>
-          !(item.id === productId && JSON.stringify(item.selectedSpecs) === JSON.stringify(specs))
-      )
+      prev.filter((item) => getItemKey(item.id, item.selectedSpecs, item.skuId) !== itemKey)
     )
   }
 
-  const updateQuantity = (productId: number, quantity: number, specs?: Record<string, string>) => {
+  const updateQuantity = (productId: number, quantity: number, specs?: Record<string, string>, skuId?: number) => {
+    const itemKey = getItemKey(productId, specs, skuId)
     setItems((prev) =>
       prev.map((item) =>
-        item.id === productId && JSON.stringify(item.selectedSpecs) === JSON.stringify(specs)
+        getItemKey(item.id, item.selectedSpecs, item.skuId) === itemKey
           ? { ...item, quantity: Math.max(1, quantity) }
           : item
       )
@@ -75,10 +82,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearCart = () => setItems([])
 
-  const toggleSelect = (productId: number, specs?: Record<string, string>) => {
+  const toggleSelect = (productId: number, specs?: Record<string, string>, skuId?: number) => {
+    const itemKey = getItemKey(productId, specs, skuId)
     setItems((prev) =>
       prev.map((item) =>
-        item.id === productId && JSON.stringify(item.selectedSpecs) === JSON.stringify(specs)
+        getItemKey(item.id, item.selectedSpecs, item.skuId) === itemKey
           ? { ...item, selected: !item.selected }
           : item
       )

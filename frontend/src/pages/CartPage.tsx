@@ -131,11 +131,25 @@ export default function CartPage() {
                                 <Link to={`/product/${item.id}`} className="shrink-0 rounded-[1.5rem] overflow-hidden shadow-2xl border border-secondary-50"><img src={item.main_image} alt="" loading="lazy" decoding="async" className="w-36 h-36 object-cover group-hover:scale-110 transition-transform" /></Link>
                                 <div className="flex-1 flex flex-col justify-between py-1">
                                     <div className="flex justify-between items-start mb-4">
-                                        <Link to={`/product/${item.id}`} className="font-black text-secondary-900 text-xl hover:text-primary transition-colors tracking-tighter italic">{item.name}</Link>
+                                        <div>
+                                            <Link to={`/product/${item.id}`} className="font-black text-secondary-900 text-xl hover:text-primary transition-colors tracking-tighter italic">{item.name}</Link>
+                                            {item.selectedSpecs && Object.keys(item.selectedSpecs).length > 0 && (
+                                                <div className="flex flex-wrap gap-2 mt-2">
+                                                    {Object.entries(item.selectedSpecs).map(([key, val]) => (
+                                                        <span key={key} className="text-[10px] font-bold text-secondary-400 bg-secondary-50 px-2.5 py-1 rounded-lg border border-secondary-100">{key}: {val}</span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                         <button onClick={() => removeFromCart(item.id, item.selectedSpecs)} className="p-2 text-secondary-200 hover:text-primary active:scale-75"><Trash2 className="h-5 w-5" /></button>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="text-2xl font-black text-primary tracking-tighter italic">¥{item.price.toFixed(2)}</span>
+                                        <div className="flex items-baseline gap-2">
+                                            <span className="text-2xl font-black text-primary tracking-tighter italic">¥{item.price.toFixed(2)}</span>
+                                            {item.original_price && item.original_price > item.price && (
+                                                <span className="text-sm font-bold text-secondary-300 line-through">¥{item.original_price.toFixed(2)}</span>
+                                            )}
+                                        </div>
                                         <div className="flex items-center gap-5 bg-secondary-50/80 p-1.5 rounded-[1.25rem] border border-secondary-100 shadow-inner">
                                             <button onClick={() => updateQuantity(item.id, item.quantity - 1, item.selectedSpecs)} disabled={item.quantity <= 1} className="w-10 h-10 bg-white rounded-xl shadow-sm hover:text-primary active:scale-75 disabled:opacity-20"><Minus className="h-4 w-4" /></button>
                                             <span className="w-8 text-center font-black text-secondary-900 tabular-nums">{item.quantity}</span>

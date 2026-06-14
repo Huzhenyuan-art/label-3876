@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Minus, Plus, MessageCircle, Store, ShoppingCart, Check, Heart, Sparkles, Zap } from 'lucide-react'
 import { Header } from '../components/Header'
-import { Product } from '../types'
+import { Product, getProductPriceAndStock } from '../types'
 import { productApi } from '../api'
 import { useCart } from '../contexts/CartContext'
 import { useFavorites } from '../contexts/FavoritesContext'
@@ -52,9 +52,16 @@ export default function ProductDetailPage() {
       const response = await productApi.getById(productId)
       const p = response.data
       setProduct(p)
-      if (p.specs) {
+      if (p.specs && p.specs.length > 0) {
         const initialSpecs: Record<string, string> = {}
-        Object.entries(p.specs).forEach(([key, values]) => { initialSpecs[key] = values[0] })
+        p.specs.forEach((spec: any) => {
+          const specName = typeof spec === 'object' ? spec.name : spec
+          const specValues = typeof spec === 'object' ? spec.values : p.specs[spec]
+          const firstValue = Array.isArray(specValues) && specValues.length > 0
+            ? (typeof specValues[0] === 'object' ? specValues[0].value : specValues[0])
+            : ''
+          initialSpecs[specName] = firstValue
+        })
         setSelectedSpecs(initialSpecs)
       }
       loadRecommended(p.category_id, p.shop_id, productId)
@@ -63,25 +70,28 @@ export default function ProductDetailPage() {
       const mockProduct = MOCK_PRODUCTS.find(p => p.id === productId)
       if (mockProduct) {
         setProduct(mockProduct)
+        if (mockProduct.specs && mockProduct.specs.length > 0) {
+          const initialSpecs: Record<string, string> = {}
+          mockProduct.specs.forEach((spec: any) => {
+            initialSpecs[spec.name] = spec.values[0]?.value || spec.values[0] || ''
+          })
+          setSelectedSpecs(initialSpecs)
+        }
         loadRecommended(mockProduct.category_id, mockProduct.shop_id, productId)
       }
     } finally { setLoading(false) }
   }
 
-  const getPriceAndStock = (specs: Record<string, string>) => {
-    if (!product) return { price: 0, stock: 0 }
-    const specString = Object.values(specs).sort().join('-')
-    let priceOffset = specString.includes('Pro') || specString.includes('1TB') ? 1000 : 0
-    return { price: product.price + priceOffset, stock: product.stock }
-  }
-
-  const { price: displayPrice, stock: displayStock } = getPriceAndStock(selectedSpecs)
+  const { price: displayPrice, original_price: displayOriginalPrice, stock: displayStock, skuId: currentSkuId } = useMemo(() => {
+    if (!product) return { price: 0, original_price: null, stock: 0, skuId: undefined }
+    return getProductPriceAndStock(product, selectedSpecs)
+  }, [product, selectedSpecs])
 
   const handleAddToCart = () => {
     if (!product) return
     setIsAdding(true)
     setTimeout(() => {
-      addToCart({ ...product, price: displayPrice }, quantity, selectedSpecs)
+      addToCart({ ...product, price: displayPrice, original_price: displayOriginalPrice, stock: displayStock }, quantity, selectedSpecs, currentSkuId)
       setIsAdding(false)
       setShowToast(true)
       setTimeout(() => setShowToast(false), 3000)
@@ -90,7 +100,7 @@ export default function ProductDetailPage() {
 
   const handleBuyNow = () => {
     if (!product) return
-    addToCart({ ...product, price: displayPrice }, quantity, selectedSpecs)
+    addToCart({ ...product, price: displayPrice, original_price: displayOriginalPrice, stock: displayStock }, quantity, selectedSpecs, currentSkuId)
     setShowToast(true)
     setTimeout(() => navigate('/cart'), 500)
   }
@@ -129,20 +139,36 @@ export default function ProductDetailPage() {
               <p className="text-secondary-400 dark:text-secondary-500 mb-10 font-bold leading-relaxed italic">{product.description}</p>
               <div className="bg-secondary-50 dark:bg-secondary-800 p-8 rounded-2xl border border-secondary-100 dark:border-secondary-700 mb-10 transition-colors">
                 <span className="text-5xl font-black text-primary tracking-tighter italic">¥{displayPrice.toFixed(2)}</span>
+                {displayOriginalPrice && displayOriginalPrice > displayPrice && (
+                  <span className="ml-4 text-xl font-bold text-secondary-300 dark:text-secondary-600 line-through tracking-tighter">¥{displayOriginalPrice.toFixed(2)}</span>
+                )}
                 <div className="flex items-center gap-4 text-xs font-black text-secondary-400 dark:text-secondary-500 pt-4 border-t border-secondary-200/50 dark:border-secondary-700 mt-4 uppercase tracking-widest">
                   <span>月销量 {product.sales}+</span><span className="w-px h-3 bg-secondary-200 dark:bg-secondary-700" /><span>当前库存 {displayStock} 件</span>
                 </div>
               </div>
-              {product.specs && Object.entries(product.specs).map(([key, values]) => (
-                <div key={key} className="mb-8">
-                  <h3 className="text-xs font-black text-secondary-500 dark:text-secondary-400 uppercase tracking-widest mb-4">{key}</h3>
-                  <div className="flex flex-wrap gap-3">
-                    {(values as string[]).map((value) => (
-                      <button key={value} onClick={() => setSelectedSpecs(prev => ({ ...prev, [key]: value }))} className={`px-6 py-3 rounded-xl border-2 transition-all font-black text-xs ${selectedSpecs[key] === value ? 'border-primary bg-primary text-white shadow-2xl scale-105' : 'border-secondary-100 dark:border-secondary-700 text-secondary-600 dark:text-secondary-400 hover:border-primary/50'}`}>{value}</button>
-                    ))}
+              {product.specs && product.specs.map((spec: any) => {
+                const specName = typeof spec === 'object' ? spec.name : spec
+                const specValues = typeof spec === 'object' ? spec.values : (product.specs as any)[spec] || []
+                return (
+                  <div key={specName} className="mb-8">
+                    <h3 className="text-xs font-black text-secondary-500 dark:text-secondary-400 uppercase tracking-widest mb-4">{specName}</h3>
+                    <div className="flex flex-wrap gap-3">
+                      {specValues.map((val: any) => {
+                        const value = typeof val === 'object' ? val.value : val
+                        return (
+                          <button
+                            key={value}
+                            onClick={() => setSelectedSpecs(prev => ({ ...prev, [specName]: value }))}
+                            className={`px-6 py-3 rounded-xl border-2 transition-all font-black text-xs ${selectedSpecs[specName] === value ? 'border-primary bg-primary text-white shadow-2xl scale-105' : 'border-secondary-100 dark:border-secondary-700 text-secondary-600 dark:text-secondary-400 hover:border-primary/50'}`}
+                          >
+                            {value}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
               <div className="mb-10">
                 <h3 className="text-xs font-black text-secondary-500 dark:text-secondary-400 mb-4 uppercase tracking-widest">购买数量</h3>
                 <div className="flex items-center bg-secondary-50 dark:bg-secondary-800 w-fit p-1.5 rounded-xl border border-secondary-100 dark:border-secondary-700 shadow-inner transition-colors">

@@ -17,6 +17,28 @@ export interface Shop {
     created_at: string
 }
 
+export interface ProductSpecValue {
+    id?: number
+    value: string
+    image?: string
+}
+
+export interface ProductSpec {
+    id?: number
+    name: string
+    values: ProductSpecValue[]
+}
+
+export interface Sku {
+    id: number
+    sku_code?: string
+    specs: Record<string, string>
+    price: number
+    original_price?: number | null
+    stock: number
+    image?: string
+}
+
 export interface Product {
     id: number
     name: string
@@ -27,12 +49,28 @@ export interface Product {
     sales: number
     main_image: string
     images: { gallery?: string[] } | null
-    specs: Record<string, string[]> | null
+    specs: ProductSpec[] | null
+    skus: Sku[] | null
     shop_id: number
     category_id: number | null
     shop?: Shop
     category?: Category
     created_at: string
+}
+
+export const findSkuBySpecs = (product: Product, specs: Record<string, string>): Sku | undefined => {
+    if (!product.skus) return undefined
+    return product.skus.find(sku => {
+        return Object.entries(specs).every(([key, value]) => sku.specs[key] === value)
+    })
+}
+
+export const getProductPriceAndStock = (product: Product, specs: Record<string, string>): { price: number; original_price: number | null; stock: number; skuId?: number } => {
+    const sku = findSkuBySpecs(product, specs)
+    if (sku) {
+        return { price: sku.price, original_price: sku.original_price ?? product.original_price, stock: sku.stock, skuId: sku.id }
+    }
+    return { price: product.price, original_price: product.original_price, stock: product.stock }
 }
 
 export interface ChatMessage {
@@ -75,7 +113,8 @@ export interface AuthResponse {
 
 export interface CartItem extends Product {
     quantity: number
-    selectedSpecs?: Record<string, string>
+    selectedSpecs: Record<string, string>
+    skuId?: number
     selected?: boolean
 }
 

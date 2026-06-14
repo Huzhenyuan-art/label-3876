@@ -654,6 +654,7 @@ async def merge_cart(
         cart.items = []
 
     if merge_data.merge_strategy == "keep_server":
+        cart = await refresh_cart(db, current_user.id)
         return cart
 
     for item_data in merge_data.items:

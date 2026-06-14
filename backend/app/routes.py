@@ -9,16 +9,17 @@ from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.database import get_db
-from app.models import Product, Shop, ChatMessage, Category, User, Order, OrderItem, Cart, CartItem
+from app.models import Product, Shop, ChatMessage, Category, User, Order, OrderItem, Cart, CartItem, ShopFollow
 from app.schemas import (
     ProductResponse, ShopResponse, ChatMessageResponse, ChatMessageCreate,
     CategoryResponse, UserCreate, UserLogin, UserResponse, Token, UserUpdate,
     OrderCreate, OrderResponse, OrderItemResponse,
-    CartResponse, CartItemCreate, CartItemUpdate, CartMergeRequest
+    CartResponse, CartItemCreate, CartItemUpdate, CartMergeRequest,
+    ShopFollowResponse, ShopFollowStatusResponse
 )
 from app.auth import (
     verify_password, get_password_hash, create_access_token,
-    get_current_active_user, get_current_user
+    get_current_active_user, get_current_user, get_current_user_optional
 )
 from app.cache import cache_key, delete_pattern
 
@@ -800,3 +801,134 @@ async def merge_cart(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="合并购物车失败"
         )
+
+
+@router.post("/shops/{shop_id}/follow", response_model=ShopFollowStatusResponse)
+async def follow_shop(
+    shop_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    shop_result = await db.execute(select(Shop).where(Shop.id == shop_id))
+    shop = shop_result.scalar_one_or_none()
+    if not shop:
+        raise HTTPException(status_code=404, detail="店铺不存在")
+
+    existing_result = await db.execute(
+        select(ShopFollow).where(
+            ShopFollow.user_id == current_user.id,
+            ShopFollow.shop_id == shop_id
+        )
+    )
+    existing_follow = existing_result.scalar_one_or_none()
+
+    if existing_follow:
+        return ShopFollowStatusResponse(
+            is_following=True,
+            follower_count=shop.follower_count
+        )
+
+    new_follow = ShopFollow(user_id=current_user.id, shop_id=shop_id)
+    db.add(new_follow)
+    shop.follower_count += 1
+
+    try:
+        await db.commit()
+        await db.refresh(shop)
+        await delete_pattern(f"cache:shops:{shop_id}")
+        return ShopFollowStatusResponse(
+            is_following=True,
+            follower_count=shop.follower_count
+        )
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="关注失败"
+        )
+
+
+@router.delete("/shops/{shop_id}/follow", response_model=ShopFollowStatusResponse)
+async def unfollow_shop(
+    shop_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    shop_result = await db.execute(select(Shop).where(Shop.id == shop_id))
+    shop = shop_result.scalar_one_or_none()
+    if not shop:
+        raise HTTPException(status_code=404, detail="店铺不存在")
+
+    follow_result = await db.execute(
+        select(ShopFollow).where(
+            ShopFollow.user_id == current_user.id,
+            ShopFollow.shop_id == shop_id
+        )
+    )
+    follow = follow_result.scalar_one_or_none()
+
+    if not follow:
+        return ShopFollowStatusResponse(
+            is_following=False,
+            follower_count=shop.follower_count
+        )
+
+    await db.delete(follow)
+    if shop.follower_count > 0:
+        shop.follower_count -= 1
+
+    try:
+        await db.commit()
+        await db.refresh(shop)
+        await delete_pattern(f"cache:shops:{shop_id}")
+        return ShopFollowStatusResponse(
+            is_following=False,
+            follower_count=shop.follower_count
+        )
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="取消关注失败"
+        )
+
+
+@router.get("/shops/{shop_id}/follow-status", response_model=ShopFollowStatusResponse)
+async def get_follow_status(
+    shop_id: int,
+    current_user: User | None = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db)
+):
+    shop_result = await db.execute(select(Shop).where(Shop.id == shop_id))
+    shop = shop_result.scalar_one_or_none()
+    if not shop:
+        raise HTTPException(status_code=404, detail="店铺不存在")
+
+    is_following = False
+    if current_user:
+        follow_result = await db.execute(
+            select(ShopFollow).where(
+                ShopFollow.user_id == current_user.id,
+                ShopFollow.shop_id == shop_id
+            )
+        )
+        is_following = follow_result.scalar_one_or_none() is not None
+
+    return ShopFollowStatusResponse(
+        is_following=is_following,
+        follower_count=shop.follower_count
+    )
+
+
+@router.get("/user/followed-shops", response_model=list[ShopFollowResponse])
+async def get_followed_shops(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(ShopFollow)
+        .where(ShopFollow.user_id == current_user.id)
+        .order_by(desc(ShopFollow.created_at))
+    )
+    follows = result.scalars().all()
+    return follows

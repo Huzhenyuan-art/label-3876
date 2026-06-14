@@ -5,6 +5,7 @@ import { Header } from '../components/Header'
 import { Product, Shop } from '../types'
 import { shopApi } from '../api'
 import { useFavorites } from '../contexts/FavoritesContext'
+import { useAuth } from '../contexts/AuthContext'
 
 const MOCK_SHOPS: Shop[] = [
   { id: 1, name: '极客数码旗舰店', logo: 'https://images.unsplash.com/photo-1541807084-5c52b6b3adef?w=100&h=100&fit=crop', description: '专注高端数码配件，为您提供极致科技体验。', rating: 4.9, follower_count: 12500, created_at: '2023-01-01' },
@@ -29,12 +30,14 @@ const CATEGORIES: { name: string; icon: React.ComponentType<{ className?: string
 export default function ShopDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { isAuthenticated } = useAuth()
   const [shop, setShop] = useState<Shop | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const { toggleFavorite, isFavorite } = useFavorites()
   const [isFollowed, setIsFollowed] = useState(false)
   const [followers, setFollowers] = useState(0)
+  const [isFollowLoading, setIsFollowLoading] = useState(false)
   const [activeCategory, setActiveCategory] = useState('全部商品')
 
   useEffect(() => {
@@ -47,6 +50,13 @@ export default function ShopDetailPage() {
       setShop(shopRes.data)
       setProducts(productsRes.data)
       setFollowers(shopRes.data.follower_count)
+
+      try {
+        const followRes = await shopApi.getFollowStatus(shopId)
+        setIsFollowed(followRes.data.is_following)
+        setFollowers(followRes.data.follower_count)
+      } catch {
+      }
     } catch (error) {
       console.error(error)
       const mockShop = MOCK_SHOPS.find(s => s.id === shopId) || MOCK_SHOPS[0]
@@ -75,9 +85,31 @@ export default function ShopDetailPage() {
     }
   }, [products, activeCategory])
 
-  const toggleFollow = () => {
-    setIsFollowed(!isFollowed)
-    setFollowers(prev => isFollowed ? prev - 1 : prev + 1)
+  const toggleFollow = async () => {
+    if (!id) return
+    const shopId = parseInt(id)
+
+    if (!isAuthenticated) {
+      navigate('/login')
+      return
+    }
+
+    setIsFollowLoading(true)
+    try {
+      if (isFollowed) {
+        const res = await shopApi.unfollow(shopId)
+        setIsFollowed(false)
+        setFollowers(res.data.follower_count)
+      } else {
+        const res = await shopApi.follow(shopId)
+        setIsFollowed(true)
+        setFollowers(res.data.follower_count)
+      }
+    } catch (error) {
+      console.error('Follow/unfollow failed:', error)
+    } finally {
+      setIsFollowLoading(false)
+    }
   }
 
   if (loading) return <div className="min-h-screen bg-secondary-50 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>

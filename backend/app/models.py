@@ -164,3 +164,16 @@ class CartItem(Base):
 
     cart: Mapped["Cart"] = relationship(back_populates="items")
     product: Mapped["Product"] = relationship(lazy="selectin")
+
+
+class ShopFollow(Base):
+    __tablename__ = "shop_follows"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("shops.id"), nullable=False, index=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, default=datetime.datetime.utcnow
+    )
+
+    shop: Mapped["Shop"] = relationship(lazy="selectin")

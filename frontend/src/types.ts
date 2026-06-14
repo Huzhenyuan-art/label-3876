@@ -222,3 +222,16 @@ export interface OrderTimelineItem {
     desc: string
     active: boolean
 }
+
+export interface ShopFollowStatus {
+    is_following: boolean
+    follower_count: number
+}
+
+export interface ShopFollow {
+    id: number
+    user_id: number
+    shop_id: number
+    created_at: string
+    shop: Shop
+}

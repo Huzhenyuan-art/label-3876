@@ -1,5 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
-import { Product, Shop, ChatMessage, Category, LoginCredentials, RegisterCredentials, AuthResponse, User, Order, OrderCreate, ServerCart, CartMergeRequest } from './types'
+import { Product, Shop, ChatMessage, Category, LoginCredentials, RegisterCredentials, AuthResponse, User, Order, OrderCreate, ServerCart, CartMergeRequest, ShopFollowStatus, ShopFollow } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8876'
 const TOKEN_KEY = 'token'
@@ -98,6 +98,13 @@ export const productApi = {
 export const shopApi = {
     getById: (id: number) => api.get<Shop>(`/shops/${id}`),
     getProducts: (id: number) => api.get<Product[]>(`/shops/${id}/products`),
+    getFollowStatus: (id: number) => api.get<ShopFollowStatus>(`/shops/${id}/follow-status`),
+    follow: (id: number) => api.post<ShopFollowStatus>(`/shops/${id}/follow`),
+    unfollow: (id: number) => api.delete<ShopFollowStatus>(`/shops/${id}/follow`),
+}
+
+export const userApi = {
+    getFollowedShops: () => api.get<ShopFollow[]>('/user/followed-shops'),
 }
 
 export const chatApi = {

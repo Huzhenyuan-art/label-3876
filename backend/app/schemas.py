@@ -218,3 +218,19 @@ class CartMergeItem(BaseModel):
 class CartMergeRequest(BaseModel):
     items: list[CartMergeItem]
     merge_strategy: str = "merge"  # "merge" 合并数量, "replace" 替换, "keep_server" 保留服务端
+
+
+class ShopFollowResponse(BaseModel):
+    id: int
+    user_id: int
+    shop_id: int
+    created_at: datetime
+    shop: ShopResponse | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class ShopFollowStatusResponse(BaseModel):
+    is_following: bool
+    follower_count: int

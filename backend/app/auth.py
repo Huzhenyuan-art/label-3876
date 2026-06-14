@@ -73,3 +73,22 @@ async def get_current_active_user(
         nickname=current_user.nickname,
         created_at=current_user.created_at,
     )
+
+
+async def get_current_user_optional(
+    token: Optional[str] = Depends(OAuth2PasswordBearer(tokenUrl="api/auth/login", auto_error=False)),
+    db: AsyncSession = Depends(get_db)
+) -> Optional[User]:
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        sub = payload.get("sub")
+        if sub is None:
+            return None
+        user_id = int(sub)
+    except (JWTError, ValueError):
+        return None
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    return user

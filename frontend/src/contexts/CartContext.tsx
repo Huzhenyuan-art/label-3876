@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { Product, CartItem, ServerCart, ServerCartItem, MergeStrategy } from '../types'
 import { cartApi } from '../api'
 import { useAuth } from './AuthContext'
+import { getItemKey, CART_STORAGE_KEY, SELECTED_STATE_KEY, PENDING_MERGE_KEY, loadLocalCart, saveLocalCart, loadSelectedState, saveSelectedState, setPendingMergeFlag, hasPendingMergeFlag } from '../lib/cart'
 
 interface CartContextType {
   items: CartItem[]
@@ -29,9 +30,6 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined)
 
-const LOCAL_CART_KEY = 'cart'
-const SELECTED_STATE_KEY = 'cart_selected'
-
 const serverCartItemToCartItem = (serverItem: ServerCartItem, selected: boolean = true): CartItem => {
   return {
     ...serverItem.product,
@@ -49,62 +47,6 @@ const cartItemToMergeItem = (item: CartItem) => ({
   specs: item.selectedSpecs || null,
   sku_id: item.skuId || null,
 })
-
-const getItemKey = (productId: number, specs?: Record<string, string>, skuId?: number): string => {
-  if (skuId) return `${productId}-sku-${skuId}`
-  return `${productId}-${JSON.stringify(specs || {})}`
-}
-
-const loadLocalCart = (): CartItem[] => {
-  try {
-    const saved = localStorage.getItem(LOCAL_CART_KEY)
-    if (saved) {
-      const parsed = JSON.parse(saved) as CartItem[]
-      return parsed.map((item) => ({
-        ...item,
-        selected: item.selected !== false,
-        selectedSpecs: item.selectedSpecs || {}
-      }))
-    }
-  } catch {
-    localStorage.removeItem(LOCAL_CART_KEY)
-  }
-  return []
-}
-
-const saveLocalCart = (items: CartItem[]) => {
-  localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(items))
-}
-
-const loadSelectedState = (): Record<string, boolean> => {
-  try {
-    const saved = localStorage.getItem(SELECTED_STATE_KEY)
-    if (saved) {
-      return JSON.parse(saved)
-    }
-  } catch {
-    localStorage.removeItem(SELECTED_STATE_KEY)
-  }
-  return {}
-}
-
-const saveSelectedState = (state: Record<string, boolean>) => {
-  localStorage.setItem(SELECTED_STATE_KEY, JSON.stringify(state))
-}
-
-const PENDING_MERGE_KEY = 'cart_pending_merge'
-
-const setPendingMergeFlag = (hasPending: boolean) => {
-  if (hasPending) {
-    localStorage.setItem(PENDING_MERGE_KEY, '1')
-  } else {
-    localStorage.removeItem(PENDING_MERGE_KEY)
-  }
-}
-
-const hasPendingMergeFlag = (): boolean => {
-  return localStorage.getItem(PENDING_MERGE_KEY) === '1'
-}
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isAuthenticated, loading: authLoading } = useAuth()

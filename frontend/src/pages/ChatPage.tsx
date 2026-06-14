@@ -3,27 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Star, ShieldCheck, Smile, Send, AlertCircle, RefreshCw } from 'lucide-react'
 import { Header } from '../components/Header'
 import { ChatMessage, Shop } from '../types'
-import { chatApi, shopApi } from '../api'
-import axios from 'axios'
-
-function getErrorMessage(err: unknown): string {
-  if (axios.isAxiosError(err)) {
-    const status = err.response?.status
-    const detail = (err.response?.data as { detail?: string })?.detail
-    switch (status) {
-      case 400:
-        return detail || '消息内容无效，请重新输入'
-      case 404:
-        return '店铺不存在或已下线'
-      case 500:
-        return detail || '服务器异常，请稍后重试'
-      default:
-        if (!err.response) return '网络连接失败，请检查网络'
-        return detail || '消息发送失败，请点击重试'
-    }
-  }
-  return '消息发送失败，请点击重试'
-}
+import { chatApi, shopApi, extractApiError } from '../api'
 
 export default function ChatPage() {
   const { shopId } = useParams<{ shopId: string }>()
@@ -76,7 +56,7 @@ export default function ChatPage() {
       })
       setError(null)
     } catch (err) {
-      setError('加载消息失败，请检查网络连接')
+      setError(extractApiError(err, '加载消息失败，请检查网络连接'))
     } finally {
       if (showLoading) setIsRefreshing(false)
     }
@@ -127,7 +107,7 @@ export default function ChatPage() {
       setMessages(prev => prev.map(m =>
         m.client_id === clientId ? { ...m, status: 'failed' as const } : m
       ))
-      setError(getErrorMessage(err))
+      setError(extractApiError(err, '消息发送失败，请点击重试'))
     } finally {
       pendingClientIds.current.delete(clientId)
       if (pendingClientIds.current.size === 0) {

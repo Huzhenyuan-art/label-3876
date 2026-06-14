@@ -7,10 +7,7 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import { useCart } from '../contexts/CartContext'
 import { CartItem } from '../types'
-
-const formatSpecsLabel = (specs: Record<string, string>): string => {
-    return Object.entries(specs).map(([key, val]) => `${key}: ${val}`).join(' / ')
-}
+import { formatSpecsLabel } from '../lib/cart'
 
 export const Header = React.memo(({ showSearch = true }: { showSearch?: boolean }) => {
     const navigate = useNavigate()

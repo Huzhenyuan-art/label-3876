@@ -38,6 +38,32 @@ api.interceptors.response.use(
     }
 )
 
+export const extractApiError = (err: unknown, fallback = '操作失败，请稍后重试'): string => {
+    if (axios.isAxiosError(err)) {
+        const status = err.response?.status
+        const detail = (err.response?.data as { detail?: string })?.detail
+        if (!err.response) return '网络连接失败，请检查网络'
+        if (status === 401) return detail || '登录已过期，请重新登录'
+        if (status === 403) return detail || '无权执行此操作'
+        if (status === 404) return detail || '请求的资源不存在'
+        if (status === 400) return detail || '请求参数无效'
+        if (status && status >= 500) return detail || '服务器异常，请稍后重试'
+        return detail || fallback
+    }
+    if (err instanceof Error) return err.message || fallback
+    return fallback
+}
+
+const pendingRequests = new Map<string, Promise<any>>()
+
+const dedupRequest = <T>(key: string, factory: () => Promise<T>): Promise<T> => {
+    const existing = pendingRequests.get(key)
+    if (existing) return existing
+    const promise = factory().finally(() => pendingRequests.delete(key))
+    pendingRequests.set(key, promise)
+    return promise
+}
+
 export interface UpdateProfileData {
     nickname?: string
     email?: string
@@ -63,14 +89,14 @@ export const setToken = (token: string) => localStorage.setItem(TOKEN_KEY, token
 export const removeToken = () => localStorage.removeItem(TOKEN_KEY)
 
 export const categoryApi = {
-    getAll: () => api.get<Category[]>('/categories'),
-    getById: (id: number) => api.get<Category>(`/categories/${id}`),
+    getAll: () => dedupRequest('categories:all', () => api.get<Category[]>('/categories')),
+    getById: (id: number) => dedupRequest(`categories:${id}`, () => api.get<Category>(`/categories/${id}`)),
 }
 
 export const productApi = {
-    getAll: (categoryId?: number) => api.get<Product[]>('/products', { params: { category_id: categoryId } }),
-    getById: (id: number) => api.get<Product>(`/products/${id}`),
-    getRecommended: async (categoryId: number | null, shopId: number, excludeId: number): Promise<Product[]> => {
+    getAll: (categoryId?: number) => dedupRequest(`products:all:${categoryId ?? ''}`, () => api.get<Product[]>('/products', { params: { category_id: categoryId } })),
+    getById: (id: number, signal?: AbortSignal) => dedupRequest(`products:${id}`, () => api.get<Product>(`/products/${id}`, { signal })),
+    getRecommended: async (categoryId: number | null, shopId: number, excludeId: number, signal?: AbortSignal): Promise<Product[]> => {
         const results: Product[] = []
         const seen = new Set<number>()
         const fetchAndMerge = async (fetcher: () => Promise<{ data: Product[] }>, priority: number) => {
@@ -96,8 +122,8 @@ export const productApi = {
 }
 
 export const shopApi = {
-    getById: (id: number) => api.get<Shop>(`/shops/${id}`),
-    getProducts: (id: number) => api.get<Product[]>(`/shops/${id}/products`),
+    getById: (id: number) => dedupRequest(`shops:${id}`, () => api.get<Shop>(`/shops/${id}`)),
+    getProducts: (id: number) => dedupRequest(`shops:${id}:products`, () => api.get<Product[]>(`/shops/${id}/products`)),
     getFollowStatus: (id: number) => api.get<ShopFollowStatus>(`/shops/${id}/follow-status`),
     follow: (id: number) => api.post<ShopFollowStatus>(`/shops/${id}/follow`),
     unfollow: (id: number) => api.delete<ShopFollowStatus>(`/shops/${id}/follow`),
@@ -118,10 +144,10 @@ export const orderApi = {
         api.post<Order>('/orders', data),
 
     getMyOrders: () =>
-        api.get<Order[]>('/orders'),
+        dedupRequest('orders:mine', () => api.get<Order[]>('/orders')),
 
     getById: (orderId: number) =>
-        api.get<Order>(`/orders/${orderId}`),
+        dedupRequest(`orders:${orderId}`, () => api.get<Order>(`/orders/${orderId}`)),
 
     cancel: (orderId: number) =>
         api.put<Order>(`/orders/${orderId}/cancel`),

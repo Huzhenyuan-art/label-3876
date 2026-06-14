@@ -2,74 +2,14 @@ import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Minus, Plus, MessageCircle, Store, ShoppingCart, Check, Heart, Sparkles, Zap, Percent, AlertTriangle } from 'lucide-react'
 import { Header } from '../components/Header'
-import { Product, ProductSpec, getProductPriceAndStock, calculateDiscount, LOW_STOCK_THRESHOLD } from '../types'
+import { Product, getProductPriceAndStock, calculateDiscount, LOW_STOCK_THRESHOLD } from '../types'
+import { extractSpecs, safeSpecEntries } from '../lib/product'
 import { productApi } from '../api'
 import { useCart } from '../contexts/CartContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 
 import { MOCK_PRODUCTS } from '../mocks'
 
-function extractSpecs(specs: ProductSpec[] | Record<string, string[]> | null): Record<string, string> {
-  if (!specs) return {}
-  const result: Record<string, string> = {}
-  
-  if (Array.isArray(specs)) {
-    for (const spec of specs) {
-      if (!spec || typeof spec !== 'object') continue
-      if (typeof spec.name !== 'string' || !Array.isArray(spec.values)) continue
-      const firstVal = spec.values[0]
-      result[spec.name] = (firstVal && typeof firstVal === 'object' && 'value' in firstVal) ? firstVal.value : (typeof firstVal === 'string' ? firstVal : '')
-    }
-  } else if (typeof specs === 'object') {
-    for (const [name, values] of Object.entries(specs)) {
-      if (Array.isArray(values) && values.length > 0) {
-        result[name] = values[0]
-      }
-    }
-  }
-  return result
-}
-
-function safeSpecEntries(specs: ProductSpec[] | Record<string, string[]> | null): { name: string; values: { value: string }[] }[] {
-  if (!specs) return []
-  const result: { name: string; values: { value: string }[] }[] = []
-  
-  if (Array.isArray(specs)) {
-    for (const spec of specs) {
-      if (!spec || typeof spec !== 'object') continue
-      if (typeof spec.name !== 'string') continue
-      if (!spec.values || !Array.isArray(spec.values)) continue
-      
-      const values: { value: string }[] = []
-      for (const v of spec.values) {
-        if (v == null) continue
-        if (typeof v === 'object' && typeof v.value === 'string') {
-          values.push({ value: v.value })
-        } else if (typeof v === 'string') {
-          values.push({ value: v })
-        }
-      }
-      
-      if (values.length > 0) {
-        result.push({ name: spec.name, values })
-      }
-    }
-  } else if (typeof specs === 'object') {
-    for (const [name, values] of Object.entries(specs)) {
-      if (!Array.isArray(values)) continue
-      const cleanedValues: { value: string }[] = []
-      for (const v of values) {
-        if (typeof v === 'string') {
-          cleanedValues.push({ value: v })
-        }
-      }
-      if (cleanedValues.length > 0) {
-        result.push({ name, values: cleanedValues })
-      }
-    }
-  }
-  return result
-}
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -86,9 +26,17 @@ export default function ProductDetailPage() {
   const [recommended, setRecommended] = useState<Product[]>([])
   const [recLoading, setRecLoading] = useState(false)
   const mountedRef = useRef(true)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
-    return () => { mountedRef.current = false }
+    mountedRef.current = true
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+    return () => {
+      mountedRef.current = false
+      controller.abort()
+      abortControllerRef.current = null
+    }
   }, [])
 
   useEffect(() => {
@@ -101,7 +49,7 @@ export default function ProductDetailPage() {
     if (id) {
       const productId = parseInt(id, 10)
       if (!isNaN(productId)) {
-        loadProduct(productId)
+        loadProduct(productId, abortControllerRef.current?.signal ?? undefined)
       } else {
         setLoading(false)
       }
@@ -110,10 +58,10 @@ export default function ProductDetailPage() {
     }
   }, [id])
 
-  const loadRecommended = async (catId: number | null, shopId: number, productId: number) => {
+  const loadRecommended = async (catId: number | null, shopId: number, productId: number, signal?: AbortSignal) => {
     setRecLoading(true)
     try {
-      const list = await productApi.getRecommended(catId, shopId, productId)
+      const list = await productApi.getRecommended(catId, shopId, productId, signal)
       if (!mountedRef.current) return
       if (list.length > 0) {
         setRecommended(list)
@@ -130,14 +78,14 @@ export default function ProductDetailPage() {
     }
   }
 
-  const loadProduct = async (productId: number) => {
+  const loadProduct = async (productId: number, signal?: AbortSignal) => {
     try {
-      const response = await productApi.getById(productId)
+      const response = await productApi.getById(productId, signal)
       if (!mountedRef.current) return
       const p = response.data
       setProduct(p)
       setSelectedSpecs(extractSpecs(p.specs))
-      loadRecommended(p.category_id, p.shop_id, productId)
+      loadRecommended(p.category_id, p.shop_id, productId, signal)
     } catch (error) {
       if (!mountedRef.current) return
       console.error(error)
@@ -145,7 +93,7 @@ export default function ProductDetailPage() {
       if (mockProduct) {
         setProduct(mockProduct)
         setSelectedSpecs(extractSpecs(mockProduct.specs))
-        loadRecommended(mockProduct.category_id, mockProduct.shop_id, productId)
+        loadRecommended(mockProduct.category_id, mockProduct.shop_id, productId, signal)
       }
     } finally {
       if (mountedRef.current) setLoading(false)

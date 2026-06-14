@@ -6,16 +6,8 @@ import { Product, Category } from '../types'
 import { productApi, categoryApi } from '../api'
 import { useFavorites } from '../contexts/FavoritesContext'
 
-import { MOCK_PRODUCTS } from '../mocks'
-
-const MOCK_CATEGORIES: Category[] = [
-  { id: 1, name: '潮流服装', icon: '👕', description: '', sort_order: 1, created_at: '' },
-  { id: 2, name: '智能数码', icon: '📱', description: '', sort_order: 2, created_at: '' },
-  { id: 3, name: '美妆护肤', icon: '💄', description: '', sort_order: 3, created_at: '' },
-  { id: 4, name: '居家生活', icon: '🏠', description: '', sort_order: 4, created_at: '' },
-  { id: 5, name: '图书文具', icon: '📚', description: '', sort_order: 5, created_at: '' },
-  { id: 6, name: '户外运动', icon: '🏃', description: '', sort_order: 6, created_at: '' },
-]
+import { MOCK_PRODUCTS, MOCK_CATEGORIES } from '../mocks'
+import { filterProductsByQuery } from '../lib/product'
 
 export default function HomePage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -71,16 +63,7 @@ export default function HomePage() {
     }
   }
 
-  const filteredProducts = React.useMemo(() => {
-    let results = products
-    if (q) {
-      results = results.filter(p =>
-        p.name.toLowerCase().includes(q) ||
-        p.description?.toLowerCase().includes(q)
-      )
-    }
-    return results
-  }, [products, q])
+  const filteredProducts = React.useMemo(() => filterProductsByQuery(products, q), [products, q])
 
   const activeCategoryName = activeCategoryId
     ? categories.find(c => c.id === activeCategoryId)?.name || ''

@@ -1,25 +1,13 @@
 import React, { useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ShoppingBag, Trash2, Minus, Plus, Zap, Check, ShieldCheck, Circle, X, RefreshCw, GitMerge, Tag } from 'lucide-react'
+import { ArrowLeft, ShoppingBag, Trash2, Minus, Plus, Zap, Check, ShieldCheck, GitMerge, Tag } from 'lucide-react'
 import { Header } from '../components/Header'
+import { CheckoutForm } from '../components/CheckoutForm'
 import { useCart } from '../contexts/CartContext'
 import { useAuth } from '../contexts/AuthContext'
-import { orderApi } from '../api'
+import { orderApi, extractApiError } from '../api'
 import { CartItem, OrderItemCreate } from '../types'
-
-const getItemKey = (productId: number, specs?: Record<string, string>, skuId?: number): string => {
-    if (skuId) return `${productId}-sku-${skuId}`
-    return `${productId}-${JSON.stringify(specs || {})}`
-}
-
-const formatSpecsLabel = (specs: Record<string, string>): JSX.Element[] => {
-    return Object.entries(specs).map(([key, val]) => (
-        <span key={`${key}-${val}`} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[11px] font-bold bg-primary/5 text-primary border-primary/20">
-            <Tag className="h-3 w-3" />
-            {key}：{val}
-        </span>
-    ))
-}
+import { getItemKey, formatSpecsTags } from '../lib/cart'
 
 export default function CartPage() {
     const navigate = useNavigate()
@@ -98,8 +86,7 @@ export default function CartPage() {
             }, 4000)
         } catch (err: any) {
             setIsProcessing(false)
-            const detail = err?.response?.data?.detail || '支付失败，请稍后重试'
-            setOrderError(typeof detail === 'string' ? detail : '支付失败，请稍后重试')
+            setOrderError(extractApiError(err, '支付失败，请稍后重试'))
         }
     }
 
@@ -165,7 +152,7 @@ export default function CartPage() {
                                                 <Link to={`/product/${item.id}`} className="font-black text-secondary-900 text-xl hover:text-primary transition-colors tracking-tighter italic">{item.name}</Link>
                                                 {item.selectedSpecs && Object.keys(item.selectedSpecs).length > 0 && (
                                                     <div className="flex flex-wrap gap-2 mt-3">
-                                                        {formatSpecsLabel(item.selectedSpecs)}
+                                                        {formatSpecsTags(item.selectedSpecs)}
                                                     </div>
                                                 )}
                                             </div>
@@ -245,104 +232,15 @@ export default function CartPage() {
                 )}
 
                 {showCheckoutForm && (
-                    <div className="fixed inset-0 bg-secondary-900/60 backdrop-blur-xl z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
-                        <div className="bg-white rounded-[3rem] p-10 max-w-lg w-full shadow-3xl border border-white animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto">
-                            <div className="flex justify-between items-center mb-8">
-                                <h2 className="text-2xl font-black text-secondary-900 tracking-tighter italic uppercase">确认订单信息</h2>
-                                <button onClick={() => { setShowCheckoutForm(false); setOrderError('') }} className="p-2 hover:bg-secondary-50 rounded-xl transition-colors text-secondary-400 hover:text-secondary-700"><X className="h-5 w-5" /></button>
-                            </div>
-                            <div className="space-y-5">
-                                <div>
-                                    <label className="block text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-2">收货人姓名</label>
-                                    <input
-                                        type="text"
-                                        value={shippingForm.contact_name}
-                                        onChange={(e) => setShippingForm({ ...shippingForm, contact_name: e.target.value })}
-                                        placeholder="请输入收货人姓名"
-                                        className="w-full px-5 py-4 rounded-2xl border-2 border-secondary-100 focus:border-primary focus:outline-none text-sm font-bold text-secondary-900 transition-colors bg-secondary-50/50"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-2">联系电话</label>
-                                    <input
-                                        type="tel"
-                                        value={shippingForm.contact_phone}
-                                        onChange={(e) => setShippingForm({ ...shippingForm, contact_phone: e.target.value })}
-                                        placeholder="请输入联系电话"
-                                        className="w-full px-5 py-4 rounded-2xl border-2 border-secondary-100 focus:border-primary focus:outline-none text-sm font-bold text-secondary-900 transition-colors bg-secondary-50/50"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-2">收货地址</label>
-                                    <textarea
-                                        value={shippingForm.shipping_address}
-                                        onChange={(e) => setShippingForm({ ...shippingForm, shipping_address: e.target.value })}
-                                        placeholder="请输入详细收货地址（省市区街道门牌号）"
-                                        rows={3}
-                                        className="w-full px-5 py-4 rounded-2xl border-2 border-secondary-100 focus:border-primary focus:outline-none text-sm font-bold text-secondary-900 transition-colors bg-secondary-50/50 resize-none"
-                                    />
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-2">支付方式</label>
-                                        <select
-                                            value={shippingForm.payment_method}
-                                            onChange={(e) => setShippingForm({ ...shippingForm, payment_method: e.target.value })}
-                                            className="w-full px-5 py-4 rounded-2xl border-2 border-secondary-100 focus:border-primary focus:outline-none text-sm font-bold text-secondary-900 transition-colors bg-secondary-50/50"
-                                        >
-                                            <option>支付宝</option>
-                                            <option>微信支付</option>
-                                            <option>银行卡</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-2">配送方式</label>
-                                        <select
-                                            value={shippingForm.shipping_method}
-                                            onChange={(e) => setShippingForm({ ...shippingForm, shipping_method: e.target.value })}
-                                            className="w-full px-5 py-4 rounded-2xl border-2 border-secondary-100 focus:border-primary focus:outline-none text-sm font-bold text-secondary-900 transition-colors bg-secondary-50/50"
-                                        >
-                                            <option>顺丰特快</option>
-                                            <option>顺丰标快</option>
-                                            <option>中通快递</option>
-                                            <option>圆通快递</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div className="bg-secondary-50 rounded-2xl p-5 border border-secondary-100 mt-4">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-xs font-black text-secondary-400 uppercase tracking-widest">应付金额</span>
-                                        <span className="text-3xl font-black text-primary italic tracking-tighter">¥{selectedTotalPrice.toFixed(2)}</span>
-                                    </div>
-                                </div>
-                                {orderError && (
-                                    <div className="bg-red-50 border-2 border-red-100 text-red-600 px-5 py-3 rounded-2xl text-sm font-bold">
-                                        {orderError}
-                                    </div>
-                                )}
-                                <div className="flex gap-3 pt-2">
-                                    <button
-                                        onClick={() => { setShowCheckoutForm(false); setOrderError('') }}
-                                        disabled={isProcessing}
-                                        className="flex-1 py-5 rounded-2xl border-2 border-secondary-100 text-secondary-600 font-black text-sm hover:bg-secondary-50 transition-all uppercase tracking-[0.2em] disabled:opacity-50"
-                                    >
-                                        取消
-                                    </button>
-                                    <button
-                                        onClick={submitOrder}
-                                        disabled={isProcessing}
-                                        className="flex-1 py-5 bg-primary text-white rounded-2xl font-black text-sm hover:bg-primary-600 shadow-xl shadow-primary/20 transition-all active:scale-95 uppercase tracking-[0.2em] flex items-center justify-center gap-2 disabled:opacity-50"
-                                    >
-                                        {isProcessing ? (
-                                            <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> 提交中...</>
-                                        ) : (
-                                            <><Zap className="h-4 w-4 fill-white" /> 提交订单</>
-                                        )}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <CheckoutForm
+                        shippingForm={shippingForm}
+                        setShippingForm={setShippingForm}
+                        orderError={orderError}
+                        isProcessing={isProcessing}
+                        selectedTotalPrice={selectedTotalPrice}
+                        onSubmit={submitOrder}
+                        onClose={() => { setShowCheckoutForm(false); setOrderError('') }}
+                    />
                 )}
             </main>
         </div>

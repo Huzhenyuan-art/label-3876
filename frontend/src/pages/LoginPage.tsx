@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, User, Lock, Mail, ChevronRight, Zap, ShieldCheck, AlertCircle } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { AxiosError } from 'axios'
+import { extractApiError } from '../api'
 
 export default function LoginPage() {
     const navigate = useNavigate()
@@ -36,9 +36,7 @@ export default function LoginPage() {
             }
             navigate('/')
         } catch (err) {
-            const axiosError = err as AxiosError<{ detail?: string }>
-            const errorMessage = axiosError.response?.data?.detail ||
-                (isLogin ? '登录失败，请检查用户名和密码' : '注册失败，请稍后重试')
+            const errorMessage = extractApiError(err, isLogin ? '登录失败，请检查用户名和密码' : '注册失败，请稍后重试')
             setError(errorMessage)
         } finally {
             setLoading(false)
@@ -48,7 +46,7 @@ export default function LoginPage() {
     return (
         <div className="min-h-screen bg-secondary-900 flex items-center justify-center p-6 relative overflow-hidden">
             {/* Background Decorative Elements */}
-            <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+            <div className="absolute top-0 left-0 w-full h100% overflow-hidden pointer-events-none">
                 <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/20 rounded-full blur-[120px]" />
                 <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-accent/20 rounded-full blur-[120px]" />
             </div>

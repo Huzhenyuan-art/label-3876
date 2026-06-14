@@ -1,4 +1,4 @@
-import { Product, Sku, Order, OrderStatus } from './types'
+import { Product, Sku, Order, OrderStatus, Shop, Category } from './types'
 
 const generateProductSpecs = (specs: { name: string; values: string[] }[]) => {
     return specs.map(spec => ({
@@ -192,6 +192,19 @@ const createOrder = (
         items,
     }
 }
+
+export const MOCK_CATEGORIES: Category[] = [
+    { id: 1, name: '潮流服装', icon: '👕', description: '', sort_order: 1, created_at: '' },
+    { id: 2, name: '智能数码', icon: '📱', description: '', sort_order: 2, created_at: '' },
+    { id: 3, name: '美妆护肤', icon: '💄', description: '', sort_order: 3, created_at: '' },
+    { id: 4, name: '居家生活', icon: '🏠', description: '', sort_order: 4, created_at: '' },
+    { id: 5, name: '图书文具', icon: '📚', description: '', sort_order: 5, created_at: '' },
+    { id: 6, name: '户外运动', icon: '🏃', description: '', sort_order: 6, created_at: '' },
+]
+
+export const MOCK_SHOPS: Shop[] = [
+    { id: 1, name: '极客数码旗舰店', logo: 'https://images.unsplash.com/photo-1541807084-5c52b6b3adef?w=100&h=100&fit=crop', description: '专注高端数码配件，为您提供极致科技体验。', rating: 4.9, follower_count: 12500, created_at: '2023-01-01' },
+]
 
 export const MOCK_ORDERS: Order[] = [
     createOrder(

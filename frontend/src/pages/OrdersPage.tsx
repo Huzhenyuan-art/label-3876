@@ -3,33 +3,10 @@ import { ArrowLeft, Package, Clock, CheckCircle2, Truck, Loader2, ShoppingCart, 
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useCart } from '../contexts/CartContext'
-import { Product, Order, ORDER_STATUS_MAP, OrderStatus } from '../types'
-import { orderApi, productApi } from '../api'
+import { Order, ORDER_STATUS_MAP, OrderStatus } from '../types'
+import { orderApi, productApi, extractApiError } from '../api'
 import { MOCK_ORDERS, MOCK_PRODUCTS } from '../mocks'
-
-const formatDate = (dateStr: string): string => {
-    try {
-        const d = new Date(dateStr)
-        const pad = (n: number) => n.toString().padStart(2, '0')
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-    } catch {
-        return dateStr
-    }
-}
-
-const getStatusIcon = (status: OrderStatus) => {
-    switch (status) {
-        case 'shipped':
-        case 'delivered':
-            return <Truck className="h-4 w-4 text-primary" />
-        case 'completed':
-            return <CheckCircle2 className="h-4 w-4 text-green-500" />
-        case 'cancelled':
-            return <Clock className="h-4 w-4 text-red-400" />
-        default:
-            return <Clock className="h-4 w-4 text-secondary-400" />
-    }
-}
+import { formatDate, getStatusIcon, buildFallbackProduct } from '../lib/order'
 
 type TabKey = 'all' | OrderStatus
 
@@ -139,35 +116,19 @@ export default function OrdersPage() {
         if (!order || order.items.length === 0) return
         setBuyingAgainOrderId(order.id)
         try {
-            for (const item of order.items) {
-                let realProduct: Product | null = null
-                try {
-                    const { data } = await productApi.getById(item.product_id)
-                    realProduct = data
-                } catch {
-                    realProduct = MOCK_PRODUCTS.find(p => p.id === item.product_id) || null
-                }
-                if (realProduct) {
-                    await addToCart(realProduct, item.quantity, item.specs || {})
-                } else {
-                    const fallbackProduct: Product = {
-                        id: item.product_id,
-                        name: item.product_name,
-                        description: '',
-                        price: item.price,
-                        original_price: null,
-                        stock: 999,
-                        sales: 0,
-                        main_image: item.product_image,
-                        images: null,
-                        specs: null,
-                        skus: null,
-                        shop_id: 1,
-                        category_id: null,
-                        created_at: item.created_at,
+            const products = await Promise.all(
+                order.items.map(async (item) => {
+                    try {
+                        const { data } = await productApi.getById(item.product_id)
+                        return data
+                    } catch {
+                        return MOCK_PRODUCTS.find(p => p.id === item.product_id) || buildFallbackProduct(item)
                     }
-                    await addToCart(fallbackProduct, item.quantity, item.specs || {})
-                }
+                })
+            )
+            for (const [i, product] of products.entries()) {
+                const item = order.items[i]
+                await addToCart(product, item.quantity, item.specs || {})
             }
             navigate('/cart')
         } catch (err: any) {
@@ -183,8 +144,7 @@ export default function OrdersPage() {
             const { data } = await orderApi.pay(orderId)
             setOrders(prev => prev.map(o => o.id === orderId ? data : o))
         } catch (err: any) {
-            const detail = err?.response?.data?.detail || '支付失败'
-            alert(typeof detail === 'string' ? detail : '支付失败')
+            alert(extractApiError(err, '支付失败'))
         }
     }
 
@@ -194,8 +154,7 @@ export default function OrdersPage() {
             const { data } = await orderApi.cancel(orderId)
             setOrders(prev => prev.map(o => o.id === orderId ? data : o))
         } catch (err: any) {
-            const detail = err?.response?.data?.detail || '取消订单失败'
-            alert(typeof detail === 'string' ? detail : '取消订单失败')
+            alert(extractApiError(err, '取消订单失败'))
         }
     }
 
@@ -205,8 +164,7 @@ export default function OrdersPage() {
             const { data } = await orderApi.receive(orderId)
             setOrders(prev => prev.map(o => o.id === orderId ? data : o))
         } catch (err: any) {
-            const detail = err?.response?.data?.detail || '确认收货失败'
-            alert(typeof detail === 'string' ? detail : '确认收货失败')
+            alert(extractApiError(err, '确认收货失败'))
         }
     }
 

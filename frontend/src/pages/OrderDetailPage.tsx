@@ -1,137 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useCart } from '../contexts/CartContext'
-import { ArrowLeft, Package, Truck, CheckCircle2, MapPin, CreditCard, Clock, Loader2, AlertCircle, XCircle, ShoppingCart, Zap, PackageCheck } from 'lucide-react'
+import { ArrowLeft, Package, Truck, MapPin, CreditCard, Loader2, AlertCircle, XCircle, ShoppingCart } from 'lucide-react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
-import { Order, ORDER_STATUS_MAP, OrderTimelineItem, OrderStatus, Product } from '../types'
-import { orderApi, productApi } from '../api'
+import { Order, Product } from '../types'
+import { orderApi, productApi, extractApiError } from '../api'
 import { MOCK_ORDERS, MOCK_PRODUCTS } from '../mocks'
-
-const formatDate = (dateStr: string): string => {
-    try {
-        const d = new Date(dateStr)
-        const pad = (n: number) => n.toString().padStart(2, '0')
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-    } catch {
-        return dateStr
-    }
-}
-
-const addHours = (dateStr: string, hours: number): string => {
-    try {
-        const d = new Date(dateStr)
-        d.setHours(d.getHours() + hours)
-        return formatDate(d.toISOString())
-    } catch {
-        return dateStr
-    }
-}
-
-const maskPhone = (phone: string): string => {
-    if (!phone || phone.length < 7) return phone || ''
-    return phone.slice(0, 3) + '****' + phone.slice(-4)
-}
-
-const generateTimeline = (order: Order): OrderTimelineItem[] => {
-    const timeline: OrderTimelineItem[] = []
-    const created = order.created_at
-    const updated = order.updated_at
-    const statusFlow: OrderStatus[] = ['pending', 'paid', 'shipped', 'delivered', 'completed']
-    const statusIndex = statusFlow.indexOf(order.status)
-
-    if (order.status === 'cancelled') {
-        timeline.push({
-            status: '订单已取消',
-            time: formatDate(updated),
-            desc: '您的订单已取消',
-            active: true,
-        })
-        timeline.push({
-            status: '已下单',
-            time: formatDate(created),
-            desc: '您的订单已提交成功',
-            active: false,
-        })
-        return timeline
-    }
-
-    if (statusIndex >= 4) {
-        timeline.push({
-            status: '订单已完成',
-            time: formatDate(updated),
-            desc: '感谢您的购买，期待再次光临',
-            active: true,
-        })
-    }
-    if (statusIndex >= 3) {
-        timeline.push({
-            status: '已确认收货',
-            time: statusIndex === 3 ? formatDate(updated) : addHours(created, 96),
-            desc: statusIndex === 3 ? '您已确认收货，订单即将完成' : '您已确认签收商品',
-            active: statusIndex === 3,
-        })
-    }
-    if (statusIndex >= 2) {
-        timeline.push({
-            status: '派送中',
-            time: addHours(created, 72),
-            desc: `【${order.shipping_method || '快递'}】快递员正在为您派送，请保持电话畅通`,
-            active: false,
-        })
-    }
-    if (statusIndex >= 2) {
-        timeline.push({
-            status: '运输中',
-            time: addHours(created, 36),
-            desc: '您的包裹已到达转运中心，正在分拣中',
-            active: false,
-        })
-    }
-    if (statusIndex >= 2) {
-        timeline.push({
-            status: '已发货',
-            time: statusIndex === 2 ? formatDate(updated) : addHours(created, 24),
-            desc: statusIndex === 2 ? '卖家已发货，包裹正在快马加鞭送往您身边' : '卖家已将包裹交由快递公司',
-            active: statusIndex === 2,
-        })
-    }
-    if (statusIndex >= 1) {
-        timeline.push({
-            status: '已支付',
-            time: addHours(created, 0.1),
-            desc: statusIndex === 1 ? '支付成功，等待卖家发货' : '您已完成支付',
-            active: statusIndex === 1,
-        })
-    }
-    if (statusIndex >= 0) {
-        timeline.push({
-            status: '已下单',
-            time: formatDate(created),
-            desc: statusIndex === 0 ? '订单提交成功，请尽快完成支付' : '您的订单已提交成功',
-            active: statusIndex === 0,
-        })
-    }
-
-    return timeline
-}
-
-const getStatusBadge = (status: OrderStatus) => {
-    switch (status) {
-        case 'completed':
-            return { text: ORDER_STATUS_MAP[status], icon: CheckCircle2, color: 'text-green-400' }
-        case 'delivered':
-        case 'shipped':
-            return { text: ORDER_STATUS_MAP[status], icon: Truck, color: 'text-primary' }
-        case 'paid':
-            return { text: ORDER_STATUS_MAP[status], icon: Package, color: 'text-blue-400' }
-        case 'cancelled':
-            return { text: ORDER_STATUS_MAP[status], icon: XCircle, color: 'text-red-400' }
-        case 'pending':
-            return { text: ORDER_STATUS_MAP[status], icon: Clock, color: 'text-yellow-400' }
-        default:
-            return { text: ORDER_STATUS_MAP[status] || status, icon: Package, color: 'text-white' }
-    }
-}
+import { formatDate, addHours, maskPhone, generateTimeline, getStatusBadge, StatusBadge, buildFallbackProduct } from '../lib/order'
+import { OrderTimeline } from '../components/OrderTimeline'
+import { OrderActionBar } from '../components/OrderActionBar'
 
 export default function OrderDetailPage() {
     const navigate = useNavigate()
@@ -174,8 +51,7 @@ export default function OrderDetailPage() {
                 }
             }
         } catch (err: any) {
-            const detail = err?.response?.data?.detail || '加载订单详情失败，请稍后重试'
-            setError(typeof detail === 'string' ? detail : '加载订单详情失败，请稍后重试')
+            setError(extractApiError(err, '加载订单详情失败，请稍后重试'))
         } finally {
             setLoading(false)
         }
@@ -189,8 +65,7 @@ export default function OrderDetailPage() {
             const { data } = await orderApi.cancel(order.id)
             setOrder(data)
         } catch (err: any) {
-            const detail = err?.response?.data?.detail || '取消订单失败'
-            alert(typeof detail === 'string' ? detail : '取消订单失败')
+            alert(extractApiError(err, '取消订单失败'))
         } finally {
             setCancelling(false)
         }
@@ -203,8 +78,7 @@ export default function OrderDetailPage() {
             const { data } = await orderApi.pay(order.id)
             setOrder(data)
         } catch (err: any) {
-            const detail = err?.response?.data?.detail || '支付失败'
-            alert(typeof detail === 'string' ? detail : '支付失败')
+            alert(extractApiError(err, '支付失败'))
         } finally {
             setPaying(false)
         }
@@ -217,8 +91,7 @@ export default function OrderDetailPage() {
             const { data } = await orderApi.ship(order.id)
             setOrder(data)
         } catch (err: any) {
-            const detail = err?.response?.data?.detail || '发货失败'
-            alert(typeof detail === 'string' ? detail : '发货失败')
+            alert(extractApiError(err, '发货失败'))
         } finally {
             setShipping(false)
         }
@@ -232,8 +105,7 @@ export default function OrderDetailPage() {
             const { data } = await orderApi.receive(order.id)
             setOrder(data)
         } catch (err: any) {
-            const detail = err?.response?.data?.detail || '确认收货失败'
-            alert(typeof detail === 'string' ? detail : '确认收货失败')
+            alert(extractApiError(err, '确认收货失败'))
         } finally {
             setReceiving(false)
         }
@@ -246,8 +118,7 @@ export default function OrderDetailPage() {
             const { data } = await orderApi.complete(order.id)
             setOrder(data)
         } catch (err: any) {
-            const detail = err?.response?.data?.detail || '完成订单失败'
-            alert(typeof detail === 'string' ? detail : '完成订单失败')
+            alert(extractApiError(err, '完成订单失败'))
         } finally {
             setCompleting(false)
         }
@@ -257,35 +128,22 @@ export default function OrderDetailPage() {
         if (!order || order.items.length === 0) return
         setBuyingAgain(true)
         try {
-            for (const item of order.items) {
-                let realProduct: Product | null = null
-                try {
-                    const { data } = await productApi.getById(item.product_id)
-                    realProduct = data
-                } catch {
-                    realProduct = MOCK_PRODUCTS.find(p => p.id === item.product_id) || null
-                }
-                if (realProduct) {
-                    await addToCart(realProduct, item.quantity, item.specs || {})
-                } else {
-                    const fallbackProduct: Product = {
-                        id: item.product_id,
-                        name: item.product_name,
-                        description: '',
-                        price: item.price,
-                        original_price: null,
-                        stock: 999,
-                        sales: 0,
-                        main_image: item.product_image,
-                        images: null,
-                        specs: null,
-                        skus: null,
-                        shop_id: 1,
-                        category_id: null,
-                        created_at: item.created_at,
+            const products = await Promise.all(
+                order.items.map(async (item) => {
+                    try {
+                        const { data } = await productApi.getById(item.product_id)
+                        return { product: data, quantity: item.quantity, specs: item.specs || {} }
+                    } catch {
+                        const mockProduct = MOCK_PRODUCTS.find(p => p.id === item.product_id)
+                        if (mockProduct) {
+                            return { product: mockProduct, quantity: item.quantity, specs: item.specs || {} }
+                        }
+                        return { product: buildFallbackProduct(item), quantity: item.quantity, specs: item.specs || {} }
                     }
-                    await addToCart(fallbackProduct, item.quantity, item.specs || {})
-                }
+                })
+            )
+            for (const { product, quantity, specs } of products) {
+                await addToCart(product, quantity, specs)
             }
             navigate('/cart')
         } catch (err: any) {
@@ -378,11 +236,6 @@ export default function OrderDetailPage() {
     const statusBadge = getStatusBadge(order.status)
     const StatusIcon = statusBadge.icon
     const canCancel = order.status === 'pending' || order.status === 'paid'
-    const canPay = order.status === 'pending'
-    const canShip = order.status === 'paid'
-    const canReceive = order.status === 'shipped'
-    const canComplete = order.status === 'delivered' || order.status === 'shipped'
-    const showActionBar = order.status !== 'cancelled'
 
     return (
         <div className="min-h-screen bg-secondary-50/30 pb-40">
@@ -439,23 +292,7 @@ export default function OrderDetailPage() {
                                 <h3 className="text-xs font-black text-secondary-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-2">
                                     <Truck className="h-3 w-3" /> 物流动态
                                 </h3>
-                                <div className="space-y-8">
-                                    {timeline.map((item, idx) => (
-                                        <div key={idx} className="flex gap-6 relative">
-                                            {idx !== timeline.length - 1 && (
-                                                <div className="absolute left-[7px] top-6 w-[2px] h-[calc(100%+8px)] bg-secondary-100" />
-                                            )}
-                                            <div className={`w-4 h-4 rounded-full mt-1.5 flex-shrink-0 z-10 border-2 ${item.active ? 'bg-primary border-primary shadow-lg shadow-primary/30' : 'bg-white border-secondary-200'}`} />
-                                            <div className="flex-1">
-                                                <div className="flex justify-between items-start mb-1">
-                                                    <span className={`text-sm font-black italic tracking-tighter uppercase ${item.active ? 'text-primary' : 'text-secondary-900'}`}>{item.status}</span>
-                                                    <span className="text-[10px] font-bold text-secondary-400">{item.time}</span>
-                                                </div>
-                                                <p className="text-xs font-bold text-secondary-500 leading-relaxed">{item.desc}</p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                <OrderTimeline timeline={timeline} />
                             </section>
 
                             <section className="bg-white rounded-[2.5rem] p-10 shadow-xl border border-secondary-50">
@@ -535,66 +372,7 @@ export default function OrderDetailPage() {
                 </div>
             </main>
 
-            {showActionBar && (
-                <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-t border-secondary-50 shadow-[0_-8px_32px_rgba(0,0,0,0.06)]">
-                    <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-3">
-                        <div className="flex-1">
-                            <p className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">应付总额</p>
-                            <p className="text-2xl font-black text-primary italic tracking-tighter">¥{order.total_amount.toFixed(2)}</p>
-                        </div>
-                        <div className="flex gap-2 flex-wrap justify-end">
-                            {canPay && (
-                                <button
-                                    onClick={handlePay}
-                                    disabled={paying}
-                                    className="px-8 py-4 bg-primary text-white rounded-2xl font-black text-xs hover:bg-primary-600 transition-all shadow-xl shadow-primary/20 uppercase tracking-widest flex items-center gap-2 disabled:opacity-50"
-                                >
-                                    {paying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4 fill-white" />}
-                                    立即支付
-                                </button>
-                            )}
-                            {canShip && (
-                                <button
-                                    onClick={handleShip}
-                                    disabled={shipping}
-                                    className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/20 uppercase tracking-widest flex items-center gap-2 disabled:opacity-50"
-                                >
-                                    {shipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
-                                    模拟发货
-                                </button>
-                            )}
-                            {canReceive && (
-                                <button
-                                    onClick={handleReceive}
-                                    disabled={receiving}
-                                    className="px-8 py-4 bg-secondary-900 text-white rounded-2xl font-black text-xs hover:bg-primary transition-all shadow-xl shadow-secondary-900/10 uppercase tracking-widest flex items-center gap-2 disabled:opacity-50"
-                                >
-                                    {receiving ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackageCheck className="h-4 w-4" />}
-                                    确认收货
-                                </button>
-                            )}
-                            {canComplete && (
-                                <button
-                                    onClick={handleComplete}
-                                    disabled={completing}
-                                    className="px-8 py-4 bg-green-600 text-white rounded-2xl font-black text-xs hover:bg-green-700 transition-all shadow-xl shadow-green-600/20 uppercase tracking-widest flex items-center gap-2 disabled:opacity-50"
-                                >
-                                    {completing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                                    完成订单
-                                </button>
-                            )}
-                            <button
-                                onClick={handleBuyAgain}
-                                disabled={buyingAgain}
-                                className="px-8 py-4 border-2 border-secondary-200 text-secondary-700 rounded-2xl font-black text-xs hover:bg-secondary-50 hover:border-secondary-300 transition-all uppercase tracking-widest flex items-center gap-2 disabled:opacity-50"
-                            >
-                                {buyingAgain ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
-                                再次购买
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <OrderActionBar order={order} paying={paying} shipping={shipping} receiving={receiving} completing={completing} buyingAgain={buyingAgain} onPay={handlePay} onShip={handleShip} onReceive={handleReceive} onComplete={handleComplete} onBuyAgain={handleBuyAgain} />
         </div>
     )
 }

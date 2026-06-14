@@ -6,25 +6,14 @@ import { Product, Shop } from '../types'
 import { shopApi } from '../api'
 import { useFavorites } from '../contexts/FavoritesContext'
 import { useAuth } from '../contexts/AuthContext'
+import { MOCK_SHOPS, MOCK_PRODUCTS } from '../mocks'
+import { sortProducts, ProductSortType } from '../lib/product'
 
-const MOCK_SHOPS: Shop[] = [
-  { id: 1, name: '极客数码旗舰店', logo: 'https://images.unsplash.com/photo-1541807084-5c52b6b3adef?w=100&h=100&fit=crop', description: '专注高端数码配件，为您提供极致科技体验。', rating: 4.9, follower_count: 12500, created_at: '2023-01-01' },
-]
-
-const MOCK_PRODUCTS: Product[] = [
-  {
-    id: 1, name: '降噪无线蓝牙耳机 Pro', description: '采用主动降噪技术，为您带来沉浸式听觉盛宴。', price: 1299, original_price: 1599, stock: 50, sales: 1200,
-    main_image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=600',
-    images: { gallery: ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e', 'https://images.unsplash.com/photo-1484704849700-f032a568e944'] },
-    specs: [{ name: '颜色', values: [{ value: '月岩灰' }, { value: '暗夜黑' }] }, { name: '配置', values: [{ value: '标准版' }, { value: 'Pro版' }] }], skus: null, shop_id: 1, category_id: null, created_at: '2024-01-01'
-  }
-]
-
-const CATEGORIES: { name: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { name: '全部商品', icon: Package },
-  { name: '上新推荐', icon: Sparkles },
-  { name: '本周热销', icon: Flame },
-  { name: '优惠专区', icon: Percent },
+const SHOP_CATEGORIES: { name: string; key: ProductSortType; icon: React.ComponentType<{ className?: string }> }[] = [
+  { name: '全部商品', key: 'default', icon: Package },
+  { name: '上新推荐', key: 'newest', icon: Sparkles },
+  { name: '本周热销', key: 'hot', icon: Flame },
+  { name: '优惠专区', key: 'discount', icon: Percent },
 ]
 
 export default function ShopDetailPage() {
@@ -38,7 +27,7 @@ export default function ShopDetailPage() {
   const [isFollowed, setIsFollowed] = useState(false)
   const [followers, setFollowers] = useState(0)
   const [isFollowLoading, setIsFollowLoading] = useState(false)
-  const [activeCategory, setActiveCategory] = useState('全部商品')
+  const [activeCategory, setActiveCategory] = useState<ProductSortType>('default')
 
   useEffect(() => {
     if (id) loadShopData(parseInt(id))
@@ -68,22 +57,7 @@ export default function ShopDetailPage() {
   }
 
   const filteredProducts = useMemo(() => {
-    switch (activeCategory) {
-      case '上新推荐':
-        return [...products].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      case '本周热销':
-        return [...products].sort((a, b) => b.sales - a.sales)
-      case '优惠专区':
-        return [...products]
-          .filter(p => p.original_price !== null && p.original_price > p.price)
-          .sort((a, b) => {
-            const discountA = a.original_price! - a.price
-            const discountB = b.original_price! - b.price
-            return discountB - discountA
-          })
-      default:
-        return products
-    }
+    return sortProducts(products, activeCategory as ProductSortType)
   }, [products, activeCategory])
 
   const toggleFollow = async () => {
@@ -156,15 +130,15 @@ export default function ShopDetailPage() {
                 </div>
               </div>
               <nav className="flex flex-col gap-2">
-                {CATEGORIES.map(({ name, icon: Icon }) => (
+                {SHOP_CATEGORIES.map(({ name, key, icon: Icon }) => (
                   <button
-                    key={name}
-                    onClick={() => setActiveCategory(name)}
-                    className={`relative flex items-center gap-3 px-4 py-3.5 rounded-2xl font-bold text-sm transition-all ${activeCategory === name ? 'bg-gradient-to-r from-primary to-primary-600 text-white shadow-xl shadow-primary/30 scale-[1.02]' : 'bg-secondary-50 text-secondary-700 hover:bg-secondary-100 hover:text-primary border border-transparent hover:border-primary/20'}`}
+                    key={key}
+                    onClick={() => setActiveCategory(key)}
+                    className={`relative flex items-center gap-3 px-4 py-3.5 rounded-2xl font-bold text-sm transition-all ${activeCategory === key ? 'bg-gradient-to-r from-primary to-primary-600 text-white shadow-xl shadow-primary/30 scale-[1.02]' : 'bg-secondary-50 text-secondary-700 hover:bg-secondary-100 hover:text-primary border border-transparent hover:border-primary/20'}`}
                   >
-                    <Icon className={`h-4 w-4 shrink-0 ${activeCategory === name ? 'text-white' : 'text-secondary-400'}`} />
+                    <Icon className={`h-4 w-4 shrink-0 ${activeCategory === key ? 'text-white' : 'text-secondary-400'}`} />
                     <span className="flex-1 text-left">{name}</span>
-                    {activeCategory === name && <div className="w-1.5 h-1.5 rounded-full bg-white/80" />}
+                    {activeCategory === key && <div className="w-1.5 h-1.5 rounded-full bg-white/80" />}
                   </button>
                 ))}
               </nav>
@@ -173,7 +147,7 @@ export default function ShopDetailPage() {
           <div className="flex-1 min-w-0">
             {filteredProducts.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-32 text-secondary-400">
-                <p className="text-lg font-black">{activeCategory}暂无商品</p>
+                <p className="text-lg font-black">{SHOP_CATEGORIES.find(c => c.key === activeCategory)?.name}暂无商品</p>
                 <p className="text-xs mt-2">换个分类看看吧</p>
               </div>
             ) : (

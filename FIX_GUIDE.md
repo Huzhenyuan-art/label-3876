@@ -222,3 +222,69 @@ export const getStatusIcon = (status: OrderStatus): React.ReactNode => {
 1. 运行 `tsc --noEmit` 或查看 IDE 诊断，确认 `lib/order.ts` 无类型错误
 2. 打开订单列表页（OrdersPage），确认订单状态图标正常显示
 3. 执行前端构建 `npm run build`，确认构建成功无报错
+
+---
+
+## Bug: 前端构建失败 - ESLint 依赖新增后 package-lock.json 不同步
+
+### 问题描述
+在为项目完善工程化基础设施时，向 `package.json` 的 `devDependencies` 中新增了 ESLint 相关依赖（`@typescript-eslint/eslint-plugin`、`@typescript-eslint/parser`、`eslint-plugin-react-hooks`、`eslint-plugin-react-refresh`、`eslint`），Docker 构建前端镜像时 `npm ci` 报错：
+
+```
+npm error `npm ci` can only install packages when your package.json and package-lock.json are in sync.
+npm error Missing: @typescript-eslint/eslint-plugin@6.14.0 from lock file
+npm error Missing: @typescript-eslint/parser@6.14.0 from lock file
+npm error Missing: eslint-plugin-react-hooks@4.6.0 from lock file
+npm error Missing: eslint-plugin-react-refresh@0.4.5 from lock file
+npm error Missing: eslint@8.55.0 from lock file
+```
+
+### 问题根因
+
+**文件**: `frontend/package.json` 和 `frontend/package-lock.json`
+
+**原因**: 修改 `package.json` 新增依赖（或调整依赖版本）后，未同步更新 `package-lock.json`。`npm ci` 严格校验 lockfile 与 `package.json` 的一致性，发现缺失则直接失败，不会自动补全。
+
+本次触发场景：
+1. 为前端新增代码检查能力，在 `package.json` 的 `devDependencies` 中新增：
+   - `@typescript-eslint/eslint-plugin@^6.14.0`
+   - `@typescript-eslint/parser@^6.14.0`
+   - `eslint@^8.55.0`
+   - `eslint-plugin-react-hooks@^4.6.0`
+   - `eslint-plugin-react-refresh@^0.4.5`
+2. 新增 `scripts` 命令：`lint`、`lint:fix`、`typecheck`
+3. 未同步执行 `npm install` 重新生成 `package-lock.json`
+
+### 修复方案
+
+在 `frontend` 目录下执行 `npm install --package-lock-only` 仅更新锁文件（不下载 node_modules 到本地）：
+
+```bash
+cd frontend
+npm install --package-lock-only
+```
+
+如果本地没有 Node.js 环境，也可以通过 Docker 执行：
+
+```bash
+docker run --rm -v "$PWD/frontend:/app" -w /app node:20-alpine npm install --package-lock-only
+```
+
+执行后，`package-lock.json` 会被更新，包含所有新增的 ESLint 依赖及其传递依赖（如 `@eslint/eslintrc`、`@typescript-eslint/type-utils`、`@typescript-eslint/utils`、`ajv`、`ignore`、`semver` 等数十个包）。
+
+### 修复的文件
+1. `frontend/package-lock.json` - 重新生成，与 `package.json` 完全同步
+
+### 预防措施
+
+**每次修改 `package.json` 后必须同步更新锁文件**，遵循以下工作流：
+
+1. 修改 `package.json`（新增/删除/升级依赖）
+2. 立即执行 `npm install`（或 `npm install --package-lock-only`）
+3. 用 `git add package.json package-lock.json` 一起提交
+4. CI 流水线中加入校验步骤：`npm ci --dry-run`
+
+### 验证方法
+1. 本地验证：`cd frontend && npm ci` 执行成功
+2. Docker 验证：`docker compose build web` 前端镜像构建成功，`npm ci` 步骤无 `Missing` 错误
+3. CI 验证：流水线中 `npm ci` 步骤通过

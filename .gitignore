@@ -2,6 +2,8 @@ node_modules/
 __pycache__/
 .venv/
 .env
+.env.local
+.env.*.local
 dist/
 build/
 .git/
@@ -10,3 +12,4 @@ build/
 .DS_Store
 *.pyc
 *.pyo
+*.log

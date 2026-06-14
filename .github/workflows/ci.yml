@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
+jobs:
+  backend-lint:
+    name: Backend Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install ruff==0.1.9
+      - run: ruff check . --config ruff.toml
+      - run: ruff format --check . --config ruff.toml
+
+  backend-test:
+    name: Backend Test
+    runs-on: ubuntu-latest
+    needs: backend-lint
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install -r requirements.txt -r requirements-test.txt
+      - run: pytest
+        env:
+          SECRET_KEY: test-secret-key-for-ci-only
+
+  frontend-lint:
+    name: Frontend Lint & Typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+
+  frontend-test:
+    name: Frontend Test
+    runs-on: ubuntu-latest
+    needs: frontend-lint
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  build:
+    name: Build & Deploy Verify
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-test]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copy env file
+        run: cp .env.development .env
+      - name: Build Docker images
+        run: docker compose build
+      - name: Start services
+        run: docker compose up -d
+      - name: Wait for services healthy
+        run: |
+          echo "Waiting for all services to become healthy..."
+          MAX_WAIT=120
+          ELAPSED=0
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            STATUS=$(docker compose ps --format json | python3 -c "
+              import sys, json
+              data = [json.loads(line) for line in sys.stdin if line.strip()]
+              unhealthy = [s for s in data if s.get('Health','') != 'healthy' and s.get('Service','') != '']
+              print('unhealthy' if unhealthy else 'healthy')
+            " 2>/dev/null || echo "checking")
+            if [ "$STATUS" = "healthy" ]; then
+              echo "All services are healthy!"
+              break
+            fi
+            echo "Services not ready yet (${ELAPSED}s/${MAX_WAIT}s)..."
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+          done
+          if [ $ELAPSED -ge $MAX_WAIT ]; then
+            echo "Timeout waiting for services to become healthy"
+            docker compose ps
+            docker compose logs
+            exit 1
+          fi
+      - name: Verify API health
+        run: |
+          RESPONSE=$(curl -s http://localhost:8876/health)
+          echo "API Health: $RESPONSE"
+          echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['status'] in ('healthy','degraded'), f'API unhealthy: {d}'"
+      - name: Verify Frontend
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3876/)
+          echo "Frontend status: $STATUS"
+          [ "$STATUS" = "200" ]
+      - name: Verify API root
+        run: |
+          RESPONSE=$(curl -s http://localhost:8876/)
+          echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'running' in d.get('message','').lower(), f'API root check failed: {d}'"
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v

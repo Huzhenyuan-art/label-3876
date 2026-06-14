@@ -2,16 +2,22 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
+import time
+
+from sqlalchemy import text
 
 from app.config import settings
 from app.routes import router
-from app.cache import init_redis, close_redis
+from app.cache import init_redis, close_redis, redis_client
+from app.database import engine
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+start_time = time.time()
 
 
 @asynccontextmanager
@@ -23,7 +29,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="E-commerce API", version="1.0.0", lifespan=lifespan)
 
-# CORS 配置
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS.split(","),
@@ -42,4 +47,27 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy"}
+    checks = {"status": "healthy", "uptime_seconds": round(time.time() - start_time, 1)}
+
+    db_status = "healthy"
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception as e:
+        db_status = f"unhealthy: {e}"
+        checks["status"] = "degraded"
+    checks["database"] = db_status
+
+    redis_status = "healthy"
+    try:
+        if redis_client:
+            await redis_client.ping()
+        else:
+            redis_status = "unhealthy: client not initialized"
+            checks["status"] = "degraded"
+    except Exception as e:
+        redis_status = f"unhealthy: {e}"
+        checks["status"] = "degraded"
+    checks["redis"] = redis_status
+
+    return checks

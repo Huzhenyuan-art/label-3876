@@ -1,413 +1,82 @@
-# 购物车功能修复指南
+# Bug 修复记录
 
-## 修复日期
-2026-06-14
+## Bug: 用户关注店铺后再次进入页面关注状态消失
 
-## 问题清单与修复方案
+### 问题描述
+用户在店铺详情页点击关注按钮，关注成功后状态显示正常。但当用户离开页面再次进入（或刷新页面）时，关注按钮又显示为"关注"而不是"已关注"。
 
----
+### 问题根因
 
-### 问题 1：用户登录后购物车同步，选择"稍后处理"之后就再也没有其他地方可以处理
+#### 1. 后端认证问题
+**文件**: `backend/app/auth.py` 中的 `get_current_user_optional` 函数
 
-#### 问题描述
-用户登录时弹出购物车同步对话框，如果用户点击"稍后处理"按钮，对话框关闭后没有任何入口可以重新触发同步操作，导致本地购物车商品无法同步到服务端。
+**原因**: 使用了 `OAuth2PasswordBearer` 作为依赖项，即使设置了 `auto_error=False`，当请求中包含 `Authorization` header 但 token 格式不正确或无效时，`OAuth2PasswordBearer` 仍然会抛出 401 异常，导致 `/shops/{shop_id}/follow-status` API 调用失败。
 
-#### 根本原因
-1. `dismissMergeDialog` 方法在关闭对话框时同时清空了 `pendingLocalCart.current`，导致待合并数据丢失
-2. 没有提供手动打开合并对话框的 API
-3. 没有追踪"是否有待合并购物车"的状态
-4. 购物车页面虽然底部提示"您可以随时在购物车页面手动同步"，但并没有实际的同步按钮
+#### 2. 前端错误处理问题
+**文件**: `frontend/src/pages/ShopDetailPage.tsx` 中的 `loadShopData` 函数
 
-#### 修复方案
+**原因**: 调用 `shopApi.getFollowStatus(shopId)` 的 catch 块是空的，当 API 调用失败时：
+- 没有错误日志，难以调试
+- `isFollowed` 状态保持默认值 `false`
+- 用户看到错误的关注状态
 
-**文件：`frontend/src/contexts/CartContext.tsx`**
+### 修复方案
 
-1. 新增 localStorage 持久化标志 `cart_pending_merge`，用于跨页面/刷新追踪待同步状态
-2. 新增状态 `hasPendingMerge` 表示当前是否有待合并的本地购物车
-3. 新增方法 `openMergeDialog()` 允许手动打开合并对话框
-4. 修改 `dismissMergeDialog()` 不再清空 `pendingLocalCart.current`，只关闭对话框
-5. 修改 `mergeLocalCart()` 所有策略（包括 `keep_server`）在成功后：
-   - 清空本地购物车 `localItems`
-   - 清除 `hasPendingMerge` 状态和持久化标志
-   - 清空 `pendingLocalCart.current`
-6. 当 `localItems` 变化时自动更新 `hasPendingMerge` 状态
+#### 1. 后端修复
+重写 `get_current_user_optional` 函数，不再依赖 `OAuth2PasswordBearer`，而是直接从 request headers 中手动提取和验证 token：
 
-**文件：`frontend/src/pages/CartPage.tsx`**
-
-1. 引入 `GitMerge` 图标
-2. 从 `useCart` 解构 `hasPendingMerge`、`openMergeDialog`、`localItemCount`、`isLoading`
-3. 在页面标题区域添加同步按钮：
-   - 仅当 `isAuthenticated && hasPendingMerge && localItemCount > 0` 时显示
-   - 显示本地购物车商品数量
-   - 带有呼吸动画吸引用户注意
-   - 点击后调用 `openMergeDialog()` 打开合并对话框
-
-**文件：`frontend/src/components/CartMergeDialog.tsx`**
-
-1. 在 `handleSelect` 中添加 try-catch 错误处理
-2. 使用 `effectiveLocalCount` 保证显示数量不为负数
-
----
-
-### 问题 2：点击合并购物车没有反应
-
-#### 问题描述
-用户在合并对话框中点击"合并购物车"按钮后，没有任何反应，购物车没有被合并。
-
-#### 根本原因
-1. `mergeLocalCart` 方法在 catch 块中只打印了错误日志，没有重新抛出，导致调用方无法感知错误
-2. `mergeLocalCart` 没有做空数据校验，如果待合并数据为空，会发送无效请求
-3. `keep_server` 策略只关闭对话框，没有清空本地购物车和待合并标志，导致状态不一致
-4. 合并成功后只有 `replace` 策略清空了本地购物车，`merge` 策略没有清空，导致本地购物车残留
-
-#### 修复方案
-
-**文件：`frontend/src/contexts/CartContext.tsx`**
-
-修改 `mergeLocalCart()` 方法：
-
-1. **空数据校验**：首先检查 `itemsToMerge.length === 0`，如果为空直接关闭对话框并清除状态
-2. **`keep_server` 策略完善**：保留服务端时也需要：
-   - 清空本地购物车 `setLocalItems([])`
-   - 清除 `hasPendingMerge` 状态和持久化标志
-   - 清空 `pendingLocalCart.current`
-3. **所有策略统一清空本地**：无论 `merge` 还是 `replace` 策略，成功后都清空 `localItems`，避免数据残留
-4. **错误抛出**：在 catch 块中 `throw error`，让调用方可以感知失败并处理
-5. **清除所有状态**：合并成功后统一清除 `hasPendingMerge`、持久化标志和 `pendingLocalCart.current`
-
----
-
-## 核心修复点总结
-
-| 模块 | 变更类型 | 说明 |
-|------|----------|------|
-| `CartContext.tsx` | 新增 | `hasPendingMerge` 状态 + localStorage 持久化 |
-| `CartContext.tsx` | 新增 | `openMergeDialog()` 手动打开对话框方法 |
-| `CartContext.tsx` | 修改 | `dismissMergeDialog()` 不再清空待合并数据 |
-| `CartContext.tsx` | 修改 | `mergeLocalCart()` 增加空数据校验、错误抛出、状态清理 |
-| `CartPage.tsx` | 新增 | 购物车页面顶部同步按钮（待合并时显示） |
-| `CartMergeDialog.tsx` | 修改 | 添加错误处理，显示更准确的商品数量 |
-
----
-
-## 验证步骤
-
-1. **未登录添加商品**：未登录状态下添加几件商品到购物车
-2. **登录触发合并对话框**：登录后应自动弹出购物车同步对话框
-3. **测试稍后处理**：点击"稍后处理"，对话框关闭
-4. **验证手动同步入口**：进入购物车页面，应看到顶部显示"同步本地购物车 (N件)"按钮
-5. **测试手动同步**：点击同步按钮，应重新弹出合并对话框
-6. **测试合并功能**：
-   - 点击"合并购物车"，应成功合并并清空本地购物车
-   - 同步按钮应消失
-   - 刷新页面后同步按钮不应再出现
-7. **测试保留服务端策略**：重复步骤1-4，选择"保留服务端"，应清空本地购物车
-
----
-
-### 问题 3：选择"保留服务端"后刷新页面，购物车同步对话框再次弹出
-
-#### 问题描述
-用户在同步对话框中选择"保留服务端"策略，操作看起来成功了，但刷新页面后，购物车同步对话框又自动弹出来了。
-
-#### 根本原因
-**React 异步状态更新与 useEffect 的竞态条件（Race Condition）**
-
-1. `clearLocalCartSync()` 中先同步调用 `saveLocalCart([])` 清空 localStorage
-2. 紧接着调用 `setLocalItems([])` 触发 React 异步状态更新
-3. React 状态更新是异步批处理的，useEffect 不会立即执行
-4. 当 useEffect 最终执行时，`localItems` 闭包中的值可能**仍然是旧数据**（非空数组）
-5. useEffect 中又执行了 `saveLocalCart(localItems)`，**把旧数据重新写回了 localStorage**
-6. 用户刷新页面后，`loadLocalCart()` 又读到了旧数据，再次触发对话框
-
-#### 修复方案
-
-**文件：`frontend/src/contexts/CartContext.tsx`**
-
-1. **新增 `skipLocalStorageSync` ref**：用于标记下一次 useEffect 执行时跳过 localStorage 写入
-```typescript
-const skipLocalStorageSync = useRef(false)
-```
-
-2. **修改 localStorage useEffect**：检查跳过标记
-```typescript
-useEffect(() => {
-    if (skipLocalStorageSync.current) {
-      skipLocalStorageSync.current = false
-      return
-    }
-    saveLocalCart(localItems)
-    // ... 其余逻辑
-}, [localItems, isAuthenticated])
-```
-
-3. **修改 `clearLocalCartSync()`**：在同步写入后设置跳过标记
-```typescript
-const clearLocalCartSync = useCallback(() => {
-    saveLocalCart([])           // 同步写入，立即生效
-    setPendingMergeFlag(false)  // 同步清除标志
-    pendingLocalCart.current = []
-    skipLocalStorageSync.current = true  // 关键：标记跳过下一次 useEffect 写入
-    setLocalItems([])           // 异步更新 React 状态
-    setHasPendingMerge(false)
-}, [])
-```
-
-**执行顺序保证**：
-1. 同步写入 localStorage（空数组）→ 保证即使立刻刷新也是空的
-2. 同步清除 pending merge flag
-3. 设置跳过标记
-4. 触发异步状态更新 → useEffect 执行时发现标记为 true，跳过写入
-
----
-
-### 问题 4：点击合并购物车按钮"没有反应"，缺少视觉反馈
-
-#### 问题描述
-用户点击"合并购物车"、"替换服务端"或"保留服务端"按钮后，界面没有任何变化，用户无法知道：
-- 请求是否正在进行
-- 操作是否成功
-- 操作是否失败以及失败原因
-
-#### 根本原因
-1. 按钮只有 `disabled` 状态的透明度变化，没有明确的 loading 指示器
-2. 成功后没有成功提示
-3. 失败后没有错误提示，错误只输出在 console 中
-4. 无法区分是哪一个按钮正在执行操作
-
-#### 修复方案
-
-**文件：`frontend/src/components/CartMergeDialog.tsx`**
-
-1. **新增本地状态追踪**：
-   - `mergeStatus: 'idle' | 'loading' | 'success' | 'error'`
-   - `errorMessage: string` 错误消息
-   - `activeStrategy: MergeStrategy | null` 当前操作的策略
-
-2. **按钮级 Loading 指示器**：每个按钮点击后显示 `Loader2` 旋转动画，仅显示在当前点击的按钮上
-
-3. **成功反馈**：
-   - 操作成功后按钮变为绿色边框和绿色图标
-   - 图标切换为 `CheckCircle2`
-   - 顶部显示绿色成功提示条"购物车同步成功！"
-
-4. **错误反馈**：
-   - 捕获异常并显示红色错误提示条
-   - 显示具体错误信息（默认"同步失败，请稍后重试"）
-   - 3 秒后自动消失
-
-5. **详细日志**：所有关键操作都添加 `console.log` / `console.error` 便于调试
-
----
-
-## 核心修复点总结（更新版）
-
-| 模块 | 变更类型 | 说明 |
-|------|----------|------|
-| `CartContext.tsx` | 新增 | `hasPendingMerge` 状态 + localStorage 持久化 |
-| `CartContext.tsx` | 新增 | `openMergeDialog()` 手动打开对话框方法 |
-| `CartContext.tsx` | 新增 | `skipLocalStorageSync` ref 防止 useEffect 竞态回写 |
-| `CartContext.tsx` | 新增 | `clearLocalCartSync()` 同步清空本地购物车（防竞态） |
-| `CartContext.tsx` | 修改 | `dismissMergeDialog()` 不再清空待合并数据 |
-| `CartContext.tsx` | 修改 | `mergeLocalCart()` 增加空数据校验、错误抛出、状态清理 |
-| `CartContext.tsx` | 修改 | 初始化逻辑增加 `hasPendingMergeFlag()` 双重校验 + 调试日志 |
-| `CartPage.tsx` | 新增 | 购物车页面顶部同步按钮（待合并时显示） |
-| `CartMergeDialog.tsx` | 重写 | 添加按钮级 loading、成功/错误视觉反馈、详细调试日志 |
-
----
-
-## 验证步骤（更新版）
-
-1. **未登录添加商品**：未登录状态下添加几件商品到购物车
-2. **登录触发合并对话框**：登录后应自动弹出购物车同步对话框
-3. **测试稍后处理**：点击"稍后处理"，对话框关闭
-4. **验证手动同步入口**：进入购物车页面，应看到顶部显示"同步本地购物车 (N件)"按钮
-5. **测试手动同步**：点击同步按钮，应重新弹出合并对话框
-6. **测试"保留服务端"策略**：
-   - 点击"保留服务端"，应看到按钮 loading 动画，然后成功提示
-   - 立即刷新页面
-   - **验证**：刷新后不应再弹出购物车同步对话框
-   - **验证**：购物车页面不再显示"同步本地购物车"按钮
-7. **测试"合并购物车"策略**：
-   - 重复步骤1-5
-   - 点击"合并购物车"，应看到按钮 loading 动画和成功提示
-   - 服务端购物车应包含本地商品
-   - 刷新页面后不应再弹出对话框
-8. **测试"替换服务端"策略**：
-   - 重复步骤1-5
-   - 点击"替换服务端"，验证按钮状态和结果
-9. **验证浏览器 DevTools Console**：操作过程中应看到 `[CartInit]`、`[CartMerge]`、`[CartSync]` 等前缀的调试日志
-
----
-
-### 问题 5：合并购物车提示 Network Error，但实际已合并成功
-
-#### 问题描述
-用户在同步对话框中点击"合并购物车"后，前端提示 `Network Error`，但实际上打开购物车页面发现数据已经合并成功了。
-
-#### 根本原因
-**SQLAlchemy async session 中 `db.refresh()` 不重新加载 `selectin` 关系，导致响应序列化时触发同步懒加载崩溃**
-
-执行流程分析：
-1. `merge_cart` 端点处理合并请求，调用 `await db.commit()` 提交事务
-2. 事务提交后，session 中所有对象过期（expire_on_commit 默认为 True）
-3. 调用 `await db.refresh(cart)` —— **只刷新 Cart 表自身的列**（id, user_id, created_at, updated_at），不会重新加载 `items` 关系
-4. FastAPI 使用 `CartResponse` 序列化 `cart` 对象
-5. 序列化时访问 `cart.items`，此时 `items` 处于过期状态
-6. SQLAlchemy 尝试懒加载 `items` 关系
-7. **在 async 上下文中触发同步懒加载，抛出 `MissingGreenlet` 异常**
-8. FastAPI 捕获异常返回 500 错误
-9. 500 错误响应可能缺少 CORS 头，浏览器拦截响应
-10. axios 将被拦截的响应报告为 `Network Error`
-11. 但数据库事务已在步骤1提交，所以数据实际已持久化
-
-**对比：为什么 `update_cart_item` 和 `remove_cart_item` 没有这个问题？**
-
-因为这两个端点在 commit 后使用了 `select(Cart).where(...)` 重新查询，`selectin` 加载策略会在查询时自动预加载 `items` 及其关联的 `product`，序列化时所有数据已就绪。
-
-#### 修复方案
-
-**文件：`backend/app/routes.py`**
-
-1. **新增 `refresh_cart()` 辅助函数**：通过重新查询确保 `selectin` 关系被正确加载
 ```python
-async def refresh_cart(db: AsyncSession, user_id: int) -> Cart:
-    result = await db.execute(select(Cart).where(Cart.user_id == user_id))
-    cart = result.scalar_one_or_none()
-    if not cart:
-        cart = await get_or_create_cart(db, user_id)
-    return cart
+# 修复前
+async def get_current_user_optional(
+    token: Optional[str] = Depends(OAuth2PasswordBearer(tokenUrl="api/auth/login", auto_error=False)),
+    db: AsyncSession = Depends(get_db)
+) -> Optional[User]:
+    if not token:
+        return None
+    # ... token 验证逻辑
+
+# 修复后
+async def get_current_user_optional(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+) -> Optional[User]:
+    authorization: str = request.headers.get("Authorization")
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    token = authorization[len("Bearer "):]
+    # ... token 验证逻辑（捕获所有异常并返回 None）
 ```
 
-2. **替换所有 `db.refresh(cart)` 为 `refresh_cart(db, current_user.id)`**：
-   - `add_cart_item`：`await db.refresh(cart)` → `cart = await refresh_cart(db, current_user.id)`
-   - `clear_cart`：同上
-   - `merge_cart`：同上
-   - `update_cart_item`：统一使用 `refresh_cart` 替代手动的 `select` 查询
-   - `remove_cart_item`：同上
+#### 2. 前端修复
+在 `loadShopData` 函数中，给空的 catch 块添加错误日志：
 
-**为什么 `refresh_cart` 能解决问题？**
-
-`select(Cart).where(Cart.user_id == user_id)` 查询会触发 `selectin` 加载策略：
-1. 先执行 `SELECT * FROM carts WHERE user_id = ?`
-2. 再执行 `SELECT * FROM cart_items WHERE cart_id IN (?)`（自动预加载 items）
-3. 再执行 `SELECT * FROM products WHERE id IN (?)`（自动预加载每个 item 的 product）
-4. 所有数据在序列化前已完整加载到内存，不需要懒加载
-
----
-
-### 问题 6：合并购物车后 UI 不刷新，需手动刷新页面才显示合并结果
-
-#### 问题描述
-用户在同步对话框中选择任意策略（特别是"保留服务端"）后，购物车页面没有立即显示合并后的商品，需要手动刷新浏览器页面才能看到更新后的购物车内容。
-
-#### 根本原因
-**双数据源切换时 `keep_server` 策略没有刷新 `serverItems` 状态，以及 `merge/replace` 策略缺少调试日志难以排查**
-
-执行流程分析：
-1. 用户点击"保留服务端"按钮
-2. 前端 `mergeLocalCart('keep_server')` 执行
-3. 原代码直接调用 `clearLocalCartSync()` + `setShowMergeDialog(false)` 然后 `return`
-4. **`serverItems` 状态从未被更新**
-5. 如果用户登录后还没触发过 `fetchServerCart()`（比如在未登录页登录直接弹出对话框），`serverItems` 还是空数组 `[]`
-6. `activeItems = isAuthenticated ? serverItems : localItems` → 显示空数组
-7. 手动刷新页面后，初始化的 `useEffect` 触发 `fetchServerCart()`，`serverItems` 才被填充，UI 显示正确
-
-对于 `merge` 和 `replace` 策略，虽然代码里有 `setServerItems(newServerItems)`，但缺少调试日志，一旦后端返回数据有问题（比如 items 为空或 product 未加载），难以快速定位是前端转换问题还是后端数据问题。
-
-#### 修复方案
-
-**文件 1：`frontend/src/contexts/CartContext.tsx`**
-
-1. **`keep_server` 策略增加 `await fetchServerCart()`**：确保保留服务端后从后端拉取最新购物车数据更新 `serverItems`
 ```typescript
-if (strategy === 'keep_server') {
-  console.log('[CartMerge] keep_server strategy: refreshing server cart')
-  await fetchServerCart()  // ← 新增：从服务端拉取最新数据
-  clearLocalCartSync()
-  setShowMergeDialog(false)
-  return
+// 修复前
+try {
+  const followRes = await shopApi.getFollowStatus(shopId)
+  setIsFollowed(followRes.data.is_following)
+  setFollowers(followRes.data.follower_count)
+} catch {
+}
+
+// 修复后
+try {
+  const followRes = await shopApi.getFollowStatus(shopId)
+  setIsFollowed(followRes.data.is_following)
+  setFollowers(followRes.data.follower_count)
+} catch (e) {
+  console.error('Failed to load follow status:', e)
 }
 ```
 
-2. **增加详细调试日志**：在 `merge/replace` 策略的 items 转换过程中打印每个 item 的转换结果，便于排查数据问题
-```typescript
-const converted = serverCartItemToCartItem(serverItem, newSelectedState[key] ?? true)
-console.log('[CartMerge] Converted item:', {
-  serverItemId: serverItem.id,
-  productId: serverItem.product_id,
-  hasProduct: !!serverItem.product,
-  convertedId: converted.id,
-  convertedName: converted.name,
-})
-return converted
-```
-以及：
-```typescript
-console.log('[CartMerge] New server items count:', newServerItems.length)
-```
+### 修复的文件
+1. `backend/app/auth.py` - 修复可选认证逻辑
+2. `frontend/src/pages/ShopDetailPage.tsx` - 添加错误日志
 
-3. **更新 `useCallback` 依赖数组**：新增 `fetchServerCart` 依赖
-```typescript
-}, [isAuthenticated, selectedState, clearLocalCartSync, fetchServerCart])
-```
-
-**文件 2：`backend/app/routes.py`**
-
-**`keep_server` 分支统一使用 `refresh_cart()`**：虽然前端现在不走 API（直接 fetchServerCart），但保持后端代码一致性，防止未来前端改回调用 API 时出问题
-```python
-if merge_data.merge_strategy == "keep_server":
-    cart = await refresh_cart(db, current_user.id)  # ← 替换原 return cart
-    return cart
-```
-
----
-
-## 核心修复点总结（最终版）
-
-| 模块 | 变更类型 | 说明 |
-|------|----------|------|
-| `CartContext.tsx` | 新增 | `hasPendingMerge` 状态 + localStorage 持久化 |
-| `CartContext.tsx` | 新增 | `openMergeDialog()` 手动打开对话框方法 |
-| `CartContext.tsx` | 新增 | `skipLocalStorageSync` ref 防止 useEffect 竞态回写 |
-| `CartContext.tsx` | 新增 | `clearLocalCartSync()` 同步清空本地购物车（防竞态） |
-| `CartContext.tsx` | 修改 | `dismissMergeDialog()` 不再清空待合并数据 |
-| `CartContext.tsx` | 修改 | `mergeLocalCart()` 增加空数据校验、错误抛出、状态清理 |
-| `CartContext.tsx` | 修改 | `mergeLocalCart()` keep_server 策略增加 `await fetchServerCart()` 刷新 UI |
-| `CartContext.tsx` | 修改 | `mergeLocalCart()` 增加 item 转换详细调试日志 |
-| `CartContext.tsx` | 修改 | 初始化逻辑增加 `hasPendingMergeFlag()` 双重校验 + 调试日志 |
-| `CartPage.tsx` | 新增 | 购物车页面顶部同步按钮（待合并时显示） |
-| `CartMergeDialog.tsx` | 重写 | 添加按钮级 loading、成功/错误视觉反馈、详细调试日志 |
-| `routes.py` | 新增 | `refresh_cart()` 辅助函数，通过 select 查询重新加载 selectin 关系 |
-| `routes.py` | 修改 | 所有购物车端点 commit 后统一使用 `refresh_cart()` 替代 `db.refresh()` |
-| `routes.py` | 修改 | `merge_cart` keep_server 分支也使用 `refresh_cart()` 返回完整数据 |
-
----
-
-## 验证步骤（最终版）
-
-1. **未登录添加商品**：未登录状态下添加几件商品到购物车
-2. **登录触发合并对话框**：登录后应自动弹出购物车同步对话框
-3. **测试稍后处理**：点击"稍后处理"，对话框关闭
-4. **验证手动同步入口**：进入购物车页面，应看到顶部显示"同步本地购物车 (N件)"按钮
-5. **测试手动同步**：点击同步按钮，应重新弹出合并对话框
-6. **测试"保留服务端"策略（UI 即时刷新验证）**：
-   - 先在服务端购物车添加一些商品（登录后正常加购）
-   - 退出登录，在本地购物车添加另一些商品
-   - 重新登录，弹出同步对话框
-   - 点击"保留服务端"，应看到按钮 loading 动画，然后成功提示
-   - **验证（关键）**：对话框关闭后，购物车页面应**立即显示服务端商品**，不需要刷新页面
-   - 立即刷新页面
-   - **验证**：刷新后不应再弹出购物车同步对话框
-   - **验证**：购物车页面不再显示"同步本地购物车"按钮
-7. **测试"合并购物车"策略（UI 即时刷新验证）**：
-   - 重复步骤1-5
-   - 点击"合并购物车"，应看到按钮 loading 动画和**绿色成功提示**
-   - **验证（关键）**：对话框关闭后，购物车页面应**立即显示合并后的所有商品**，不需要刷新页面
-   - 刷新页面后不应再弹出对话框
-8. **测试"替换服务端"策略（UI 即时刷新验证）**：
-   - 重复步骤1-5
-   - 点击"替换服务端"，验证按钮状态
-   - **验证（关键）**：对话框关闭后，购物车页面应**立即显示原本地购物车的商品**（已替换到服务端）
-9. **验证浏览器 DevTools Console**：操作过程中应看到 `[CartInit]`、`[CartMerge]`、`[CartSync]` 等前缀的调试日志，合并时应看到 `[CartMerge] Converted item:` 和 `[CartMerge] New server items count:` 输出
-10. **验证后端日志**：合并操作不应出现 500 错误或 MissingGreenlet 异常
+### 验证方法
+1. 登录账号
+2. 进入任意店铺详情页
+3. 点击关注按钮，确认状态变为"已关注"
+4. 刷新页面或导航离开再返回
+5. 确认关注状态仍然显示为"已关注"
+6. 打开浏览器控制台，确认没有 `Failed to load follow status` 相关错误

@@ -55,7 +55,8 @@ export default function ShopDetailPage() {
         const followRes = await shopApi.getFollowStatus(shopId)
         setIsFollowed(followRes.data.is_following)
         setFollowers(followRes.data.follower_count)
-      } catch {
+      } catch (e) {
+        console.error('Failed to load follow status:', e)
       }
     } catch (error) {
       console.error(error)

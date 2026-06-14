@@ -288,3 +288,187 @@ docker run --rm -v "$PWD/frontend:/app" -w /app node:20-alpine npm install --pac
 1. 本地验证：`cd frontend && npm ci` 执行成功
 2. Docker 验证：`docker compose build web` 前端镜像构建成功，`npm ci` 步骤无 `Missing` 错误
 3. CI 验证：流水线中 `npm ci` 步骤通过
+
+---
+
+## Bug: FavoritesPage 中 addToCart 调用参数数量不匹配
+
+### 问题描述
+TypeScript 编译时报错：`Expected 3-4 arguments, but got 2`，指向 FavoritesPage 中调用 `addToCart(product, 1)` 的位置。
+
+### 问题根因
+
+**文件**: `frontend/src/pages/FavoritesPage.tsx` 和 `frontend/src/contexts/CartContext.tsx`
+
+**原因**: `CartContext` 中 `addToCart` 的函数签名要求至少 3 个参数：
+
+```typescript
+// CartContext 定义
+addToCart: (product: Product, quantity: number, specs: Record<string, string>, skuId?: number) => Promise<void>
+```
+
+而 `FavoritesPage.tsx` 第 266 行调用时只传了 2 个参数：
+
+```typescript
+await addToCart(product, 1)
+```
+
+第三个参数 `specs`（规格选择）是必填的，不能省略。即使商品没有选择规格，也需要传入空对象 `{}`。
+
+### 修复方案
+
+在 `FavoritesPage.tsx` 中给 `addToCart` 调用补充第三个参数（空规格对象）：
+
+```typescript
+// 修复前
+await addToCart(product, 1)
+
+// 修复后
+await addToCart(product, 1, {})
+```
+
+如果商品有默认规格（如第一个 SKU），应传对应的规格对象。当前场景下用户直接从收藏列表加购，未选择规格，传空对象 `{}` 与购物车初始化逻辑兼容。
+
+### 修复的文件
+1. `frontend/src/pages/FavoritesPage.tsx` - 补充 `specs: {}` 参数
+
+### 预防措施
+1. 添加 ESLint 规则检查函数调用参数数量（TypeScript 本身也会校验）
+2. 对可选参数较多的函数，使用选项对象（options object）模式提升可读性
+
+### 验证方法
+1. 运行 `tsc --noEmit`，确认无参数不匹配错误
+2. 在收藏页面点击加购按钮，确认商品能正常加入购物车
+
+---
+
+## Bug: AuthContext 测试中访问 renderHook 返回的不存在的 container 属性
+
+### 问题描述
+TypeScript 编译时报错：`Property 'container' does not exist on type 'RenderHookResult<...>'`，指向 `AuthContext.test.tsx` 中 `const { container } = renderHook(...)`。
+
+### 问题根因
+
+**文件**: `frontend/src/test/AuthContext.test.tsx`
+
+**原因**: 混淆了 `render` 和 `renderHook` 两个测试工具的返回值：
+
+| 函数 | 返回值 | 用途 |
+|------|--------|------|
+| `render(component)` | `{ container, getByTestId, ... }` | 渲染 React 组件，返回 DOM 查询工具 |
+| `renderHook(hook)` | `{ result, rerender, unmount }` | 渲染自定义 Hook，返回 hook 的结果引用 |
+
+测试代码错误地用 `renderHook` 来渲染 `<ProtectedRoute>` 组件，并尝试解构 `container`，但 `renderHook` 的返回类型中根本没有 `container` 属性。
+
+### 修复方案
+
+将 `renderHook` 替换为 `render` 来正确渲染组件，并使用 `screen` 查询 DOM：
+
+```typescript
+// 修复前
+const { container } = renderHook(
+  () => (
+    <ProtectedRoute>
+      <div data-testid="protected-content">受保护内容</div>
+    </ProtectedRoute>
+  ),
+  { wrapper }
+)
+expect(true).toBe(true)
+
+// 修复后
+render(
+  <BrowserRouter>
+    <AuthProvider>
+      <ProtectedRoute>
+        <div data-testid="protected-content">受保护内容</div>
+      </ProtectedRoute>
+    </AuthProvider>
+  </BrowserRouter>
+)
+expect(screen.getByTestId('protected-content')).toBeInTheDocument()
+```
+
+同时在 import 中添加 `render` 和 `screen`：
+```typescript
+import { renderHook, act, render, screen } from '@testing-library/react'
+```
+
+### 修复的文件
+1. `frontend/src/test/AuthContext.test.tsx` - 替换 `renderHook` 为 `render`，使用 `screen` 断言
+
+### 预防措施
+1. 写测试前明确区分「测试 Hook」还是「测试组件」
+2. 测试组件一律用 `render` + `screen` 查询
+3. 测试 Hook 一律用 `renderHook` + `result.current`
+
+### 验证方法
+1. 运行 `tsc --noEmit`，确认无 `container does not exist` 错误
+2. 运行 `npm test`，`AuthContext.test.tsx` 所有测试通过
+
+---
+
+## Bug: CartItem 接口继承 Product 时 id 属性类型不兼容
+
+### 问题描述
+TypeScript 编译时报错：`Interface 'CartItem' incorrectly extends interface 'Product'. Types of property 'id' are incompatible. Type 'number | undefined' is not assignable to type 'number'.`
+
+### 问题根因
+
+**文件**: `frontend/src/types.ts`
+
+**原因**: `CartItem` 使用 `extends Product` 继承，但将 `id` 从必填改为可选，违反了接口继承的类型兼容性规则：
+
+```typescript
+// Product.id 是必填的 number
+interface Product {
+  id: number
+  // ...
+}
+
+// CartItem 试图把 id 改为可选，不兼容
+interface CartItem extends Product {
+  id?: number  // ❌ 错误：不能将父接口的必填字段改为可选
+  quantity: number
+  // ...
+}
+```
+
+**设计背景**：购物车项有两种使用场景
+- **服务端返回**：`id` 是购物车记录的 ID（必填）
+- **本地新增**：尚未提交到服务器，`id` 可能不存在（可选）
+
+因此 `CartItem.id` 设计为可选是合理的，但不能通过直接继承实现。
+
+### 修复方案
+
+使用 `Omit<Product, 'id'>` 排除冲突字段，再重新定义 `id`：
+
+```typescript
+// 修复前
+interface CartItem extends Product {
+  id?: number
+  // ...
+}
+
+// 修复后
+interface CartItem extends Omit<Product, 'id'> {
+  id?: number
+  // ...
+}
+```
+
+`Omit<T, K>` 是 TypeScript 内置工具类型，用于从类型 `T` 中排除键 `K`，然后在子接口中重新定义该属性，避免继承冲突。
+
+### 修复的文件
+1. `frontend/src/types.ts` - `CartItem` 改用 `Omit<Product, 'id'>` 继承
+
+### 预防措施
+1. 接口继承时，注意不能把父接口的必填字段改为可选
+2. 需要「继承但修改某些字段」时，使用 `Omit` / `Pick` 组合模式
+3. 类似场景也可以考虑使用交叉类型 `type CartItem = Omit<Product, 'id'> & { id?: number; ... }`
+
+### 验证方法
+1. 运行 `tsc --noEmit`，确认无 `incorrectly extends` 错误
+2. 打开购物车页面，确认商品列表正常显示
+3. 验证购物车增删改操作正常

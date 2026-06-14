@@ -119,7 +119,7 @@ export interface AuthResponse {
     user: User
 }
 
-export interface CartItem extends Product {
+export interface CartItem extends Omit<Product, 'id'> {
     id?: number
     quantity: number
     selectedSpecs: Record<string, string>

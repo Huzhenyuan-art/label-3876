@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, Mock } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, act, render, screen } from '@testing-library/react'
 import { AuthProvider, useAuth, ProtectedRoute } from '../contexts/AuthContext'
 import { mockUser, mockAuthResponse } from './mocks'
 import React from 'react'
@@ -206,16 +206,17 @@ describe('ProtectedRoute - 登录拦截', () => {
     ;(apiModule.getToken as Mock).mockReturnValue('valid-token')
     ;(apiModule.authApi.getCurrentUser as Mock).mockResolvedValue({ data: mockUser })
 
-    const { container } = renderHook(
-      () => (
-        <ProtectedRoute>
-          <div data-testid="protected-content">受保护内容</div>
-        </ProtectedRoute>
-      ),
-      { wrapper }
+    render(
+      <BrowserRouter>
+        <AuthProvider>
+          <ProtectedRoute>
+            <div data-testid="protected-content">受保护内容</div>
+          </ProtectedRoute>
+        </AuthProvider>
+      </BrowserRouter>
     )
 
-    expect(true).toBe(true)
+    expect(screen.getByTestId('protected-content')).toBeInTheDocument()
   })
 
   it('未登录用户访问受保护路由应被重定向', () => {

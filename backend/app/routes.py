@@ -1,4 +1,5 @@
 import uuid
+import json
 import logging
 from datetime import timedelta, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,11 +9,12 @@ from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.database import get_db
-from app.models import Product, Shop, ChatMessage, Category, User, Order, OrderItem
+from app.models import Product, Shop, ChatMessage, Category, User, Order, OrderItem, Cart, CartItem
 from app.schemas import (
     ProductResponse, ShopResponse, ChatMessageResponse, ChatMessageCreate,
     CategoryResponse, UserCreate, UserLogin, UserResponse, Token, UserUpdate,
-    OrderCreate, OrderResponse, OrderItemResponse
+    OrderCreate, OrderResponse, OrderItemResponse,
+    CartResponse, CartItemCreate, CartItemUpdate, CartMergeRequest
 )
 from app.auth import (
     verify_password, get_password_hash, create_access_token,
@@ -454,4 +456,240 @@ async def pay_order(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="支付失败，请稍后重试"
+        )
+
+
+async def get_or_create_cart(db: AsyncSession, user_id: int) -> Cart:
+    result = await db.execute(select(Cart).where(Cart.user_id == user_id))
+    cart = result.scalar_one_or_none()
+    if not cart:
+        cart = Cart(user_id=user_id)
+        db.add(cart)
+        try:
+            await db.commit()
+            await db.refresh(cart)
+        except IntegrityError:
+            await db.rollback()
+            result = await db.execute(select(Cart).where(Cart.user_id == user_id))
+            cart = result.scalar_one_or_none()
+            if not cart:
+                raise
+    return cart
+
+
+def get_cart_item_key(product_id: int, specs: dict | None = None, sku_id: int | None = None) -> str:
+    if sku_id:
+        return f"{product_id}-sku-{sku_id}"
+    return f"{product_id}-{json.dumps(specs or {}, sort_keys=True)}"
+
+
+@router.get("/cart", response_model=CartResponse)
+async def get_cart(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    cart = await get_or_create_cart(db, current_user.id)
+    return cart
+
+
+@router.post("/cart/items", response_model=CartResponse, status_code=status.HTTP_201_CREATED)
+async def add_cart_item(
+    item_data: CartItemCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    product_result = await db.execute(select(Product).where(Product.id == item_data.product_id))
+    product = product_result.scalar_one_or_none()
+    if not product:
+        raise HTTPException(status_code=404, detail="商品不存在")
+
+    if item_data.quantity <= 0:
+        raise HTTPException(status_code=400, detail="数量必须大于0")
+
+    if item_data.quantity > product.stock:
+        raise HTTPException(status_code=400, detail="库存不足")
+
+    cart = await get_or_create_cart(db, current_user.id)
+    item_key = get_cart_item_key(item_data.product_id, item_data.specs, item_data.sku_id)
+
+    existing_item = None
+    for item in cart.items:
+        if get_cart_item_key(item.product_id, item.specs, item.sku_id) == item_key:
+            existing_item = item
+            break
+
+    if existing_item:
+        new_quantity = existing_item.quantity + item_data.quantity
+        if new_quantity > product.stock:
+            raise HTTPException(status_code=400, detail="库存不足")
+        existing_item.quantity = new_quantity
+    else:
+        new_item = CartItem(
+            cart_id=cart.id,
+            product_id=item_data.product_id,
+            quantity=item_data.quantity,
+            specs=item_data.specs,
+            sku_id=item_data.sku_id,
+        )
+        db.add(new_item)
+
+    try:
+        await db.commit()
+        await db.refresh(cart)
+        return cart
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="添加购物车失败"
+        )
+
+
+@router.put("/cart/items/{item_id}", response_model=CartResponse)
+async def update_cart_item(
+    item_id: int,
+    item_data: CartItemUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if item_data.quantity <= 0:
+        raise HTTPException(status_code=400, detail="数量必须大于0")
+
+    result = await db.execute(
+        select(CartItem)
+        .join(Cart)
+        .where(CartItem.id == item_id, Cart.user_id == current_user.id)
+    )
+    cart_item = result.scalar_one_or_none()
+    if not cart_item:
+        raise HTTPException(status_code=404, detail="购物车商品不存在")
+
+    product_result = await db.execute(select(Product).where(Product.id == cart_item.product_id))
+    product = product_result.scalar_one_or_none()
+    if product and item_data.quantity > product.stock:
+        raise HTTPException(status_code=400, detail="库存不足")
+
+    cart_item.quantity = item_data.quantity
+
+    try:
+        await db.commit()
+        cart_result = await db.execute(select(Cart).where(Cart.user_id == current_user.id))
+        cart = cart_result.scalar_one()
+        return cart
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="更新购物车失败"
+        )
+
+
+@router.delete("/cart/items/{item_id}", response_model=CartResponse)
+async def remove_cart_item(
+    item_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(CartItem)
+        .join(Cart)
+        .where(CartItem.id == item_id, Cart.user_id == current_user.id)
+    )
+    cart_item = result.scalar_one_or_none()
+    if not cart_item:
+        raise HTTPException(status_code=404, detail="购物车商品不存在")
+
+    await db.delete(cart_item)
+    try:
+        await db.commit()
+        cart_result = await db.execute(select(Cart).where(Cart.user_id == current_user.id))
+        cart = cart_result.scalar_one_or_none()
+        if not cart:
+            cart = await get_or_create_cart(db, current_user.id)
+        return cart
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="删除购物车商品失败"
+        )
+
+
+@router.delete("/cart/clear", response_model=CartResponse)
+async def clear_cart(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    cart = await get_or_create_cart(db, current_user.id)
+    for item in cart.items:
+        await db.delete(item)
+    try:
+        await db.commit()
+        await db.refresh(cart)
+        return cart
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="清空购物车失败"
+        )
+
+
+@router.post("/cart/merge", response_model=CartResponse)
+async def merge_cart(
+    merge_data: CartMergeRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    cart = await get_or_create_cart(db, current_user.id)
+
+    if merge_data.merge_strategy == "replace":
+        for item in cart.items:
+            await db.delete(item)
+        await db.flush()
+        cart.items = []
+
+    if merge_data.merge_strategy == "keep_server":
+        return cart
+
+    for item_data in merge_data.items:
+        product_result = await db.execute(select(Product).where(Product.id == item_data.product_id))
+        product = product_result.scalar_one_or_none()
+        if not product:
+            continue
+
+        if item_data.quantity <= 0 or item_data.quantity > product.stock:
+            continue
+
+        item_key = get_cart_item_key(item_data.product_id, item_data.specs, item_data.sku_id)
+        existing_item = None
+        for item in cart.items:
+            if get_cart_item_key(item.product_id, item.specs, item.sku_id) == item_key:
+                existing_item = item
+                break
+
+        if existing_item:
+            new_quantity = existing_item.quantity + item_data.quantity
+            if new_quantity > product.stock:
+                new_quantity = product.stock
+            existing_item.quantity = new_quantity
+        else:
+            new_item = CartItem(
+                cart_id=cart.id,
+                product_id=item_data.product_id,
+                quantity=item_data.quantity,
+                specs=item_data.specs,
+                sku_id=item_data.sku_id,
+            )
+            db.add(new_item)
+
+    try:
+        await db.commit()
+        await db.refresh(cart)
+        return cart
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="合并购物车失败"
         )

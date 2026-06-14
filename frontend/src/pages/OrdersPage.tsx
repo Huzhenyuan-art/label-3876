@@ -134,8 +134,8 @@ export default function OrdersPage() {
         fetchOrders()
     }, [isAuthenticated])
 
-    const handleBuyAgain = (order: Order) => {
-        order.items.forEach(async (item) => {
+    const handleBuyAgain = async (order: Order) => {
+        for (const item of order.items) {
             try {
                 const product: Product = {
                     id: item.product_id,
@@ -152,11 +152,11 @@ export default function OrdersPage() {
                     category_id: null,
                     created_at: item.created_at,
                 }
-                addToCart(product, item.quantity, item.specs || undefined)
+                await addToCart(product, item.quantity, item.specs || undefined)
             } catch {
                 // ignore
             }
-        })
+        }
         navigate('/cart')
     }
 

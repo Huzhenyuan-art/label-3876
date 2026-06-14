@@ -169,3 +169,52 @@ class OrderResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class CartItemCreate(BaseModel):
+    product_id: int
+    quantity: int = 1
+    specs: dict | None = None
+    sku_id: int | None = None
+
+
+class CartItemUpdate(BaseModel):
+    quantity: int
+
+
+class CartItemResponse(BaseModel):
+    id: int
+    cart_id: int
+    product_id: int
+    quantity: int
+    specs: dict | None = None
+    sku_id: int | None = None
+    created_at: datetime
+    updated_at: datetime
+    product: ProductResponse
+
+    class Config:
+        from_attributes = True
+
+
+class CartResponse(BaseModel):
+    id: int
+    user_id: int
+    created_at: datetime
+    updated_at: datetime
+    items: list[CartItemResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+class CartMergeItem(BaseModel):
+    product_id: int
+    quantity: int
+    specs: dict | None = None
+    sku_id: int | None = None
+
+
+class CartMergeRequest(BaseModel):
+    items: list[CartMergeItem]
+    merge_strategy: str = "merge"  # "merge" 合并数量, "replace" 替换, "keep_server" 保留服务端

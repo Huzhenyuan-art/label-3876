@@ -1,5 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
-import { Product, Shop, ChatMessage, Category, LoginCredentials, RegisterCredentials, AuthResponse, User, Order, OrderCreate } from './types'
+import { Product, Shop, ChatMessage, Category, LoginCredentials, RegisterCredentials, AuthResponse, User, Order, OrderCreate, ServerCart, CartMergeRequest } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8876'
 const TOKEN_KEY = 'token'
@@ -121,4 +121,24 @@ export const orderApi = {
 
     pay: (orderId: number) =>
         api.put<Order>(`/orders/${orderId}/pay`),
+}
+
+export const cartApi = {
+    getCart: () =>
+        api.get<ServerCart>('/cart'),
+
+    addItem: (productId: number, quantity: number, specs?: Record<string, string>, skuId?: number) =>
+        api.post<ServerCart>('/cart/items', { product_id: productId, quantity, specs, sku_id: skuId }),
+
+    updateItem: (itemId: number, quantity: number) =>
+        api.put<ServerCart>(`/cart/items/${itemId}`, { quantity }),
+
+    removeItem: (itemId: number) =>
+        api.delete<ServerCart>(`/cart/items/${itemId}`),
+
+    clear: () =>
+        api.delete<ServerCart>('/cart/clear'),
+
+    merge: (data: CartMergeRequest) =>
+        api.post<ServerCart>('/cart/merge', data),
 }

@@ -112,10 +112,43 @@ export interface AuthResponse {
 }
 
 export interface CartItem extends Product {
+    id?: number
     quantity: number
     selectedSpecs: Record<string, string>
     skuId?: number
     selected?: boolean
+}
+
+export interface ServerCartItem {
+    id: number
+    cart_id: number
+    product_id: number
+    quantity: number
+    specs: Record<string, string> | null
+    sku_id: number | null
+    created_at: string
+    updated_at: string
+    product: Product
+}
+
+export interface ServerCart {
+    id: number
+    user_id: number
+    created_at: string
+    updated_at: string
+    items: ServerCartItem[]
+}
+
+export type MergeStrategy = 'merge' | 'replace' | 'keep_server'
+
+export interface CartMergeRequest {
+    items: Array<{
+        product_id: number
+        quantity: number
+        specs: Record<string, string> | null
+        sku_id: number | null
+    }>
+    merge_strategy: MergeStrategy
 }
 
 export interface OrderItem {

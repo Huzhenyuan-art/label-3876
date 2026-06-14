@@ -73,9 +73,13 @@ export default function CartPage() {
             setIsProcessing(false)
             setShowCheckoutForm(false)
             setShowSuccess(true)
-            setTimeout(() => {
+            setTimeout(async () => {
                 setShowSuccess(false)
-                removeSelected()
+                try {
+                    await removeSelected()
+                } catch (error) {
+                    console.error('Failed to remove selected items:', error)
+                }
                 navigate('/orders')
             }, 4000)
         } catch (err: any) {
@@ -141,7 +145,7 @@ export default function CartPage() {
                                                 </div>
                                             )}
                                         </div>
-                                        <button onClick={() => removeFromCart(item.id, item.selectedSpecs)} className="p-2 text-secondary-200 hover:text-primary active:scale-75"><Trash2 className="h-5 w-5" /></button>
+                                        <button onClick={async () => { try { await removeFromCart(item.id, item.selectedSpecs) } catch (error) { console.error('Failed to remove item:', error) } }} className="p-2 text-secondary-200 hover:text-primary active:scale-75"><Trash2 className="h-5 w-5" /></button>
                                     </div>
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-baseline gap-2">
@@ -151,9 +155,9 @@ export default function CartPage() {
                                             )}
                                         </div>
                                         <div className="flex items-center gap-5 bg-secondary-50/80 p-1.5 rounded-[1.25rem] border border-secondary-100 shadow-inner">
-                                            <button onClick={() => updateQuantity(item.id, item.quantity - 1, item.selectedSpecs)} disabled={item.quantity <= 1} className="w-10 h-10 bg-white rounded-xl shadow-sm hover:text-primary active:scale-75 disabled:opacity-20"><Minus className="h-4 w-4" /></button>
+                                            <button onClick={async () => { try { await updateQuantity(item.id, item.quantity - 1, item.selectedSpecs) } catch (error) { console.error('Failed to update quantity:', error) } }} disabled={item.quantity <= 1} className="w-10 h-10 bg-white rounded-xl shadow-sm hover:text-primary active:scale-75 disabled:opacity-20"><Minus className="h-4 w-4" /></button>
                                             <span className="w-8 text-center font-black text-secondary-900 tabular-nums">{item.quantity}</span>
-                                            <button onClick={() => updateQuantity(item.id, item.quantity + 1, item.selectedSpecs)} className="w-10 h-10 bg-white rounded-xl shadow-sm hover:text-primary active:scale-75"><Plus className="h-4 w-4" /></button>
+                                            <button onClick={async () => { try { await updateQuantity(item.id, item.quantity + 1, item.selectedSpecs) } catch (error) { console.error('Failed to update quantity:', error) } }} className="w-10 h-10 bg-white rounded-xl shadow-sm hover:text-primary active:scale-75"><Plus className="h-4 w-4" /></button>
                                         </div>
                                     </div>
                                 </div>

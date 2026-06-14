@@ -200,7 +200,7 @@ export default function FavoritesPage() {
                                         </div>
                                         <div className="flex gap-2">
                                             <button
-                                                onClick={() => addToCart(product, 1)}
+                                                onClick={async () => { try { await addToCart(product, 1) } catch (error) { console.error('Failed to add to cart:', error) } }}
                                                 className="p-3 bg-secondary-50 text-secondary-400 hover:text-primary hover:bg-primary/10 rounded-xl transition-all shadow-sm active:scale-75"
                                             >
                                                 <ShoppingCart className="h-4 w-4" />

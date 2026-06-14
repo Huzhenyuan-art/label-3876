@@ -159,22 +159,29 @@ export default function ProductDetailPage() {
 
   const specEntries = useMemo(() => safeSpecEntries(product?.specs ?? null), [product])
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!product) return
     setIsAdding(true)
-    setTimeout(() => {
-      addToCart({ ...product, price: displayPrice, original_price: displayOriginalPrice, stock: displayStock }, quantity, selectedSpecs, currentSkuId)
-      setIsAdding(false)
+    try {
+      await addToCart({ ...product, price: displayPrice, original_price: displayOriginalPrice, stock: displayStock }, quantity, selectedSpecs, currentSkuId)
       setShowToast(true)
       setTimeout(() => setShowToast(false), 3000)
-    }, 800)
+    } catch (error) {
+      console.error('Failed to add to cart:', error)
+    } finally {
+      setIsAdding(false)
+    }
   }
 
-  const handleBuyNow = () => {
+  const handleBuyNow = async () => {
     if (!product) return
-    addToCart({ ...product, price: displayPrice, original_price: displayOriginalPrice, stock: displayStock }, quantity, selectedSpecs, currentSkuId)
-    setShowToast(true)
-    setTimeout(() => navigate('/cart'), 500)
+    try {
+      await addToCart({ ...product, price: displayPrice, original_price: displayOriginalPrice, stock: displayStock }, quantity, selectedSpecs, currentSkuId)
+      setShowToast(true)
+      setTimeout(() => navigate('/cart'), 500)
+    } catch (error) {
+      console.error('Failed to add to cart:', error)
+    }
   }
 
   if (loading) return <div className="min-h-screen bg-secondary-50 dark:bg-secondary-900 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>

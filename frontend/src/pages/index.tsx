@@ -7,6 +7,9 @@ import { CartProvider } from '../contexts/CartContext'
 import { FavoritesProvider } from '../contexts/FavoritesContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
 
+// Components
+import { CartMergeDialog } from '../components/CartMergeDialog'
+
 // Pages
 import HomePage from './HomePage'
 import ProductDetailPage from './ProductDetailPage'
@@ -104,6 +107,7 @@ export default function App() {
                                     <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
                                     <Route path="*" element={<NotFoundPage />} />
                                 </Routes>
+                                <CartMergeDialog />
                             </ErrorBoundary>
                         </FavoritesProvider>
                     </CartProvider>

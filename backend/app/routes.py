@@ -403,3 +403,37 @@ async def cancel_order(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="取消订单失败"
         )
+
+
+@router.put("/orders/{order_id}/pay", response_model=OrderResponse)
+async def pay_order(
+    order_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    if order.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权操作该订单"
+        )
+    if order.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前订单状态不允许支付"
+        )
+    order.status = "paid"
+    order.updated_at = datetime.utcnow()
+    try:
+        await db.commit()
+        await db.refresh(order)
+        return order
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="支付失败，请稍后重试"
+        )

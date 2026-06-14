@@ -60,7 +60,7 @@ export default function CartPage() {
                 quantity: item.quantity,
                 specs: item.selectedSpecs || null,
             }))
-            const { data } = await orderApi.create({
+            const { data: createdOrder } = await orderApi.create({
                 items: orderItems,
                 shipping_address: shippingForm.shipping_address,
                 contact_name: shippingForm.contact_name,
@@ -68,7 +68,8 @@ export default function CartPage() {
                 payment_method: shippingForm.payment_method,
                 shipping_method: shippingForm.shipping_method,
             })
-            setCreatedOrderNo(data.order_no)
+            const { data: paidOrder } = await orderApi.pay(createdOrder.id)
+            setCreatedOrderNo(paidOrder.order_no)
             setIsProcessing(false)
             setShowCheckoutForm(false)
             setShowSuccess(true)
@@ -79,8 +80,8 @@ export default function CartPage() {
             }, 4000)
         } catch (err: any) {
             setIsProcessing(false)
-            const detail = err?.response?.data?.detail || '创建订单失败，请稍后重试'
-            setOrderError(typeof detail === 'string' ? detail : '创建订单失败，请稍后重试')
+            const detail = err?.response?.data?.detail || '支付失败，请稍后重试'
+            setOrderError(typeof detail === 'string' ? detail : '支付失败，请稍后重试')
         }
     }
 

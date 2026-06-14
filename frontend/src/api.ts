@@ -118,4 +118,7 @@ export const orderApi = {
 
     cancel: (orderId: number) =>
         api.put<Order>(`/orders/${orderId}/cancel`),
+
+    pay: (orderId: number) =>
+        api.put<Order>(`/orders/${orderId}/pay`),
 }

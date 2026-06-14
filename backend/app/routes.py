@@ -1,4 +1,5 @@
 import uuid
+import logging
 from datetime import timedelta, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, desc
@@ -17,6 +18,9 @@ from app.auth import (
     verify_password, get_password_hash, create_access_token,
     get_current_active_user, get_current_user
 )
+from app.cache import cache_key, delete_pattern
+
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -161,6 +165,7 @@ async def update_user_profile(
 
 
 @router.get("/categories", response_model=list[CategoryResponse])
+@cache_key(prefix="cache:categories:list", ttl=86400)
 async def get_categories(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Category).order_by(Category.sort_order, Category.id))
     categories = result.scalars().all()
@@ -168,6 +173,7 @@ async def get_categories(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/categories/{category_id}", response_model=CategoryResponse)
+@cache_key(prefix="cache:categories", ttl=86400)
 async def get_category(category_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Category).where(Category.id == category_id))
     category = result.scalar_one_or_none()
@@ -177,6 +183,7 @@ async def get_category(category_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/products", response_model=list[ProductResponse])
+@cache_key(prefix="cache:products:list", ttl=3600)
 async def get_products(
     category_id: int | None = Query(None, description="Filter products by category ID"),
     db: AsyncSession = Depends(get_db)
@@ -190,6 +197,7 @@ async def get_products(
 
 
 @router.get("/products/{product_id}", response_model=ProductResponse)
+@cache_key(prefix="cache:products", ttl=3600)
 async def get_product(product_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Product).where(Product.id == product_id))
     product = result.scalar_one_or_none()
@@ -208,6 +216,7 @@ async def get_shop(shop_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/shops/{shop_id}/products", response_model=list[ProductResponse])
+@cache_key(prefix="cache:shops:products", ttl=3600)
 async def get_shop_products(shop_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Product).where(Product.shop_id == shop_id))
     products = result.scalars().all()
@@ -330,6 +339,9 @@ async def create_order(
     try:
         await db.commit()
         await db.refresh(new_order)
+        await delete_pattern("cache:products:*")
+        await delete_pattern("cache:shops:products:*")
+        logger.info("Cache invalidated after order creation")
         return new_order
     except IntegrityError:
         await db.rollback()
@@ -396,6 +408,9 @@ async def cancel_order(
     try:
         await db.commit()
         await db.refresh(order)
+        await delete_pattern("cache:products:*")
+        await delete_pattern("cache:shops:products:*")
+        logger.info("Cache invalidated after order cancellation")
         return order
     except IntegrityError:
         await db.rollback()
@@ -430,6 +445,9 @@ async def pay_order(
     try:
         await db.commit()
         await db.refresh(order)
+        await delete_pattern("cache:products:*")
+        await delete_pattern("cache:shops:products:*")
+        logger.info("Cache invalidated after order payment")
         return order
     except IntegrityError:
         await db.rollback()

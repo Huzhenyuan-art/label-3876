@@ -1,9 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 import logging
 
 from app.config import settings
 from app.routes import router
+from app.cache import init_redis, close_redis
 
 logging.basicConfig(
     level=logging.INFO,
@@ -11,7 +13,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="E-commerce API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_redis()
+    yield
+    await close_redis()
+
+
+app = FastAPI(title="E-commerce API", version="1.0.0", lifespan=lifespan)
 
 # CORS 配置
 app.add_middleware(

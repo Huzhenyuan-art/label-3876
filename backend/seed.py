@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import engine, Base, async_session
 from app.models import Shop, Product, ChatMessage, Category, User, Order, OrderItem
 from app.auth import get_password_hash
+from app.cache import init_redis, clear_all_cache, close_redis
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -15,6 +16,12 @@ async def seed_data():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+
+    logger.info("Initializing Redis connection...")
+    await init_redis()
+
+    logger.info("Clearing existing cache...")
+    await clear_all_cache()
 
     logger.info("Seeding data...")
     async with async_session() as session:
@@ -540,6 +547,9 @@ async def seed_data():
         logger.info(f"  普通用户账号: testuser / {test_password}")
         logger.info("")
         logger.info("=" * 60)
+
+    logger.info("Closing Redis connection...")
+    await close_redis()
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+import React from 'react'
 import { Order, OrderStatus, OrderTimelineItem, ORDER_STATUS_MAP, Product } from '../types'
 import { Truck, CheckCircle2, Clock, XCircle, Package } from 'lucide-react'
 
@@ -88,17 +89,17 @@ export const getStatusBadge = (status: OrderStatus): StatusBadge => {
     }
 }
 
-export const getStatusIcon = (status: OrderStatus) => {
+export const getStatusIcon = (status: OrderStatus): React.ReactNode => {
     switch (status) {
         case 'shipped':
         case 'delivered':
-            return <Truck className="h-4 w-4 text-primary" />
+            return React.createElement(Truck, { className: 'h-4 w-4 text-primary' })
         case 'completed':
-            return <CheckCircle2 className="h-4 w-4 text-green-500" />
+            return React.createElement(CheckCircle2, { className: 'h-4 w-4 text-green-500' })
         case 'cancelled':
-            return <Clock className="h-4 w-4 text-red-400" />
+            return React.createElement(Clock, { className: 'h-4 w-4 text-red-400' })
         default:
-            return <Clock className="h-4 w-4 text-secondary-400" />
+            return React.createElement(Clock, { className: 'h-4 w-4 text-secondary-400' })
     }
 }
 

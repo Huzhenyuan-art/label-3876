@@ -148,3 +148,77 @@ npm install --registry https://registry.npmmirror.com
 2. 确认 `npm ci` 步骤成功完成，不再报 `Missing: xxx from lock file` 错误
 3. 确认后续 `npm run build` 步骤成功执行
 4. 确认前端容器正常启动
+
+---
+
+## Bug: lib/order.ts 在非 JSX 环境下返回 JSX 元素导致构建错误
+
+### 问题描述
+`frontend/src/lib/order.ts` 文件使用 `.ts` 扩展名（非 JSX 环境），但 `getStatusIcon` 函数中直接使用 JSX 语法（如 `<Truck />`、`<CheckCircle2 />` 等），同时 `StatusBadge` 接口引用了 `React.ComponentType` 类型但未导入 React，导致 TypeScript 构建报错。
+
+### 问题根因
+
+**文件**: `frontend/src/lib/order.ts`
+
+**原因**: 
+1. `.ts` 文件不支持 JSX 语法糖，直接写 `<Component />` 会编译失败
+2. 文件中使用了 `React.ComponentType` 类型但未导入 `React`
+3. 同目录下的 `lib/cart.ts` 和 `lib/product.ts` 已采用 `React.createElement` 方式避免此问题，但 `order.ts` 遗漏了
+
+### 修复方案
+
+#### 1. 导入 React 类型
+在文件顶部添加 React 导入，使 `React.ComponentType` 和 `React.ReactNode` 类型可用：
+
+```typescript
+// 修复前
+import { Order, OrderStatus, OrderTimelineItem, ORDER_STATUS_MAP, Product } from '../types'
+
+// 修复后
+import React from 'react'
+import { Order, OrderStatus, OrderTimelineItem, ORDER_STATUS_MAP, Product } from '../types'
+```
+
+#### 2. 将 JSX 语法替换为 React.createElement
+将 `getStatusIcon` 函数中的 JSX 语法全部替换为 `React.createElement` 调用，与 `lib/cart.ts`、`lib/product.ts` 保持一致：
+
+```typescript
+// 修复前
+export const getStatusIcon = (status: OrderStatus) => {
+    switch (status) {
+        case 'shipped':
+        case 'delivered':
+            return <Truck className="h-4 w-4 text-primary" />
+        case 'completed':
+            return <CheckCircle2 className="h-4 w-4 text-green-500" />
+        ...
+    }
+}
+
+// 修复后
+export const getStatusIcon = (status: OrderStatus): React.ReactNode => {
+    switch (status) {
+        case 'shipped':
+        case 'delivered':
+            return React.createElement(Truck, { className: 'h-4 w-4 text-primary' })
+        case 'completed':
+            return React.createElement(CheckCircle2, { className: 'h-4 w-4 text-green-500' })
+        ...
+    }
+}
+```
+
+### 修复的文件
+1. `frontend/src/lib/order.ts` - 添加 React 导入，JSX 改为 React.createElement
+
+### 预防措施
+
+在 `lib/` 目录下的纯工具 `.ts` 文件中：
+1. **禁止直接使用 JSX 语法**，统一使用 `React.createElement`
+2. **使用 React 类型前必须导入** `import React from 'react'`
+3. 新增返回 React 节点的函数时，参考 `lib/cart.ts` 和 `lib/product.ts` 中的 `formatSpecsTags` 实现模式
+
+### 验证方法
+1. 运行 `tsc --noEmit` 或查看 IDE 诊断，确认 `lib/order.ts` 无类型错误
+2. 打开订单列表页（OrdersPage），确认订单状态图标正常显示
+3. 执行前端构建 `npm run build`，确认构建成功无报错
